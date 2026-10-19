@@ -15,12 +15,14 @@
     "test:integration": "firebase emulators:exec --only auth,firestore \"vitest run tests/integration\"",
     "test": "npm run test:unit && firebase emulators:exec --only auth,firestore \"vitest run tests/rules tests/integration\"",
     "deploy": "npm run holidays:update && npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes",
-    "holidays:update": "node scripts/update-holidays.mjs"
+    "holidays:update": "node scripts/update-holidays.mjs",
+    "deploy:auto": "node scripts/deploy-firebase.mjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
     "@vitejs/plugin-react": "^4.7.0",
     "firebase-tools": "^15.34.0",
+    "google-auth-library": "^9.15.1",
     "playwright-core": "^1.64.1",
     "vite": "^6.4.4",
     "vitest": "^3.2.7"
