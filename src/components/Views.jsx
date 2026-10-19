@@ -22,7 +22,7 @@ function datesBetween(start, end) {
 function Chip({ inst, tz, onOpen, compact, continued }) {
   const style = { '--c': inst.color };
   const cls = ['chip', inst.allDay ? 'chip-allday' : 'chip-timed',
-    inst.ev.completed ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
+    inst.done ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
   return (
     <button type="button" className={cls} style={style} onClick={(e) => { e.stopPropagation(); onOpen(inst); }}
       title={`${inst.title} · ${whoLabel(inst)}`}>
@@ -51,7 +51,7 @@ function Bar({ bar, tz, onOpen }) {
   const multi = span > 1 || contLeft || contRight || inst.startDate !== inst.endDate;
   const cls = ['chip', 'bar', inst.allDay || multi ? 'chip-allday' : 'chip-timed',
     contLeft ? 'cont-left' : '', contRight ? 'cont-right' : '',
-    inst.ev.completed ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
+    inst.done ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
   return (
     <button type="button" className={cls}
       style={{ '--c': inst.color, '--col': startCol, '--span': span, '--lane': lane }}
@@ -199,7 +199,7 @@ export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt })
                 const inst = it.inst;
                 return (
                   <button type="button" key={it.key}
-                    className={`tevent ${inst.ev.completed ? 'chip-done' : ''} ${inst.hiddenDetails ? 'chip-busy' : ''}`}
+                    className={`tevent ${inst.done ? 'chip-done' : ''} ${inst.hiddenDetails ? 'chip-busy' : ''}`}
                     style={{ top: it.top, height: it.bottom - it.top - 2, left: `calc(${pos.col * width}% + 2px)`, width: `calc(${width}% - 4px)`, '--c': inst.color }}
                     onClick={(e) => { e.stopPropagation(); onOpen(inst); }}
                     title={`${inst.title} · ${whoLabel(inst)}`}>
@@ -229,7 +229,7 @@ export function ListView({ instances, range, today, tz, onOpen, emptyText }) {
           <section key={d} className={`list-day ${d === today ? 'today' : ''}`}>
             <h3><span className="dlabel">{dt.toFormat('M월 d일 (ccc)')}</span>{holidayOf(d) && <span className="hname">{holidayOf(d)}</span>}{d === today && <span className="badge">오늘</span>}</h3>
             {byDate.get(d).map((inst) => (
-              <button type="button" key={inst.key} className={`list-item ${inst.ev.completed ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
+              <button type="button" key={inst.key} className={`list-item ${inst.done ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
                 <span className="list-color" style={{ background: inst.color }} />
                 <span className="list-time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
                 <span className="list-main">

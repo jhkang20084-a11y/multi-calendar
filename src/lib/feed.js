@@ -86,6 +86,8 @@ export function buildInstances({ eventsByCal, sources, calendarsById, range, uid
           ...base,
           key: `${src.calendarId}/${ev.id}/${o.occKey ?? ''}`,
           occKey: o.occKey,
+          // 완료 여부: 반복 일정은 회차별, 아니면 일정 자체
+          done: o.occKey ? (ev.completedOccs || []).includes(o.occKey) : Boolean(ev.completed),
           // 기념일은 매년 "N주년"을 자동으로 붙인다(첫 해 당일은 제목 그대로)
           title: years > 0 ? `${title} ${years}주년` : title,
         };
@@ -136,6 +138,7 @@ export function milestoneInstances(ev, base, title, range) {
       key: `${base.calendarId}/${ev.id}/d${n}`,
       occKey: null,
       virtual: true,
+      done: false,
       milestoneDays: n,
       title: `${title} ${n.toLocaleString('ko-KR')}일`,
       startDate: date,

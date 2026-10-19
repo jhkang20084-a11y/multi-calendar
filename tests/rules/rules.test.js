@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import { createCalendar, changeMemberRole, removeMember, transferOwnership, leaveCalendar, newCalendarDoc } from '../../src/services/calendars.js';
 import { inviteMember, acceptInvitation, declineInvitation, cancelInvitation } from '../../src/services/invitations.js';
-import { addTodos, createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
+import { setOccurrenceCompleted, addTodos, createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
 import { subscribe, unsubscribe, subscriptionId, setSubscriptionColor } from '../../src/services/subscriptions.js';
 import { addTodo, toggleTodo } from '../../src/services/todos.js';
 import { ensureUserProfile } from '../../src/services/users.js';
@@ -460,5 +460,19 @@ describe('구독 색', () => {
     expect((await getDoc(doc(a, 'subscriptions', id))).data().color).toBe('#e8a3a0');
     await assertSucceeds(setSubscriptionColor(a, id, '#8fa876'));
     await assertFails(setSubscriptionColor(dbOf('bob'), id, '#000000'));
+  });
+});
+
+describe('그날 목록에서 완료 체크', () => {
+  it('편집자는 회차별/일정 완료 가능, 열람자는 불가', async () => {
+    const calId = await sharedWithBob('viewer');
+    const a = dbOf('alice');
+    const rid = await createEvent(a, users.alice, calId, eventInput({ recurrence: { freq: 'DAILY', interval: 1 } }));
+    await assertSucceeds(setOccurrenceCompleted(a, users.alice, calId, rid, '2026-10-21', true));
+    expect((await getDoc(doc(a, 'calendars', calId, 'events', rid))).data().completedOccs).toEqual(['2026-10-21']);
+    await assertSucceeds(setOccurrenceCompleted(a, users.alice, calId, rid, '2026-10-21', false));
+    const sid = await createEvent(a, users.alice, calId, eventInput());
+    await assertSucceeds(setOccurrenceCompleted(a, users.alice, calId, sid, null, true));
+    await assertFails(setOccurrenceCompleted(dbOf('bob'), users.bob, calId, sid, null, false));
   });
 });

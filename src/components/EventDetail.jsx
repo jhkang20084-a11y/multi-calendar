@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, Avatar, useUi } from './ui.jsx';
 import { db } from '../firebase.js';
-import { listenEvent, getSecret, deleteEvent, deleteRecurringOccurrence, setCompleted, VISIBILITY_LABELS } from '../services/events.js';
+import { listenEvent, getSecret, deleteEvent, deleteRecurringOccurrence, setOccurrenceCompleted, VISIBILITY_LABELS } from '../services/events.js';
 import { listenTodos, addTodo, toggleTodo, updateTodo, deleteTodo } from '../services/todos.js';
 import { canEdit, ROLE_LABELS, roleOf } from '../services/calendars.js';
 import { describeRecurrence } from '../lib/recurrence.js';
@@ -184,7 +184,7 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
       <div className="detail">
         <div className="detail-title">
           <span className="dot" style={{ background: inst.color || calendar?.color }} />
-          <h3 className={ev.completed ? 'strike' : ''}>{inst.virtual ? inst.title : title}</h3>
+          <h3 className={inst.done ? 'strike' : ''}>{inst.virtual ? inst.title : title}</h3>
         </div>
         <p className="detail-when">{whenText(when, zone)}{!when.allDay && ev.timeZone !== zone && <span className="muted"> (일정 시간대: {ev.timeZone})</span>}</p>
         {ev.recurrence && <p className="muted">🔁 {describeRecurrence(ev.recurrence)}</p>}
@@ -220,11 +220,11 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
 
         {editable && (
           <label className="check">
-            <input type="checkbox" checked={ev.completed} onChange={(e) => write(setCompleted(db, user, inst.calendarId, inst.eventId, ev, e.target.checked), e.target.checked ? '완료로 표시했습니다.' : '완료 표시를 해제했습니다.')} />
+            <input type="checkbox" checked={Boolean(inst.done)} onChange={(e) => write(setOccurrenceCompleted(db, user, inst.calendarId, inst.eventId, inst.occKey, e.target.checked), e.target.checked ? '완료로 표시했습니다.' : '완료 표시를 해제했습니다.')} />
             완료
           </label>
         )}
-        {!editable && ev.completed && <p>✅ 완료됨</p>}
+        {!editable && inst.done && <p>✅ 완료됨</p>}
 
         {canSeeDetails && (
           <TodoList user={user} calId={inst.calendarId} eventId={inst.eventId} members={members} editable={editable} />

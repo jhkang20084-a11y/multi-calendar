@@ -6,7 +6,7 @@ import { useAuthState } from './hooks/useAuthState.js';
 import { useOnline } from './hooks/useOnline.js';
 import { useEventFeed, useMySecrets } from './hooks/useEventFeed.js';
 import { UiProvider, useUi, Spinner, ErrorBoundary, Torn, Hearts, SketchFilter } from './components/ui.jsx';
-import { DayNotes, MonthMemo } from './components/Notes.jsx';
+import { DayNotes, DayDialog, MonthMemo } from './components/Notes.jsx';
 import { coverStyle } from './lib/colors.js';
 import { MonthView, TimeGridView, ListView } from './components/Views.jsx';
 import { SwipePager } from './components/SwipePager.jsx';
@@ -16,7 +16,7 @@ import { NewCalendarDialog, CalendarSettingsDialog, InvitationsDialog } from './
 import { Sidebar, SyncBadge, SettingsDialog, useDdayItems } from './components/Shell.jsx';
 import { listenProfile, updateSettings, DEFAULT_SETTINGS } from './services/users.js';
 import { listenMyCalendars, canEdit } from './services/calendars.js';
-import { getSecret } from './services/events.js';
+import { getSecret, setOccurrenceCompleted } from './services/events.js';
 import { listenMySubscriptions } from './services/subscriptions.js';
 import { listenMyInvitations } from './services/invitations.js';
 import { friendlyError } from './services/errors.js';
@@ -211,6 +211,9 @@ function Main({ user }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // {type, ...}
   const [pendingFocus, setPendingFocus] = useState(null);
+  // 그날 일정 창에서 연 일정 입력/수정 창을 닫으면 다시 그날 일정 창으로 돌아간다
+  const returnTo = useRef(null);
+  const closeDialog = () => { const back = returnTo.current; returnTo.current = null; setDialog(back); };
 
   // 링크로 막 참여한 캘린더가 목록에 나타나면 그 캘린더로 이동
   useEffect(() => {
@@ -356,6 +359,17 @@ function Main({ user }) {
     openEdit(inst, secret);
   }
 
+  // 그날 일정 목록에서 바로 완료 체크 (고칠 수 있는 일정만, 자동 계산된 기념일 제외)
+  function canToggle(inst) {
+    if (inst.virtual || inst.hiddenDetails) return false;
+    const cal = calendarsById.get(inst.calendarId);
+    return canEdit(cal, user.uid) && (inst.ev.visibility === 'members' || inst.ev.createdBy === user.uid);
+  }
+  function toggleDone(inst, done) {
+    setOccurrenceCompleted(db, user, inst.calendarId, inst.eventId, inst.occKey, done)
+      .catch((e) => toast('error', friendlyError(e)));
+  }
+
   const focusedCal = calendarsById.get(focus);
   const emptyText = search ? `"${search}"에 맞는 일정이 이 기간에 없습니다.` : '이 기간에 일정이 없습니다.';
 
@@ -463,12 +477,12 @@ function Main({ user }) {
                 <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
                   selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
                   onOpen={openInstance}
-                  onSelectDate={(d) => { setSelectedDate(d); openCreate(d); }}
+                  onSelectDate={(d) => { setSelectedDate(d); setDialog({ type: 'day', date: d }); }}
                   onCreateAt={(d) => openCreate(d)} />
               </SwipePager>
               <div className="notes-grid">
                 <DayNotes date={selectedDate} instances={instances} tz={tz}
-                  onOpen={openInstance} onCreate={(d) => openCreate(d)} />
+                  onOpen={openInstance} onCreate={(d) => openCreate(d)} canToggle={canToggle} onToggle={toggleDone} />
                 <MonthMemo user={user} calendar={focusedCal || null} month={anchor.slice(0, 7)} />
               </div>
             </>
@@ -493,12 +507,18 @@ function Main({ user }) {
 
       {dialog?.type === 'editor' && (
         <EventEditor mode={dialog.mode} user={user} editableCalendars={editableCalendars}
-          existing={dialog.existing} defaults={dialog.defaults} onClose={() => setDialog(null)} />
+          existing={dialog.existing} defaults={dialog.defaults} onClose={closeDialog} />
+      )}
+      {dialog?.type === 'day' && (
+        <DayDialog date={dialog.date} instances={instances} tz={tz}
+          onOpen={(inst) => { returnTo.current = { type: 'day', date: dialog.date }; openInstance(inst); }}
+          onCreate={(d) => { returnTo.current = { type: 'day', date: d }; openCreate(d); }}
+          canToggle={canToggle} onToggle={toggleDone} onClose={() => setDialog(null)} />
       )}
       {dialog?.type === 'detail' && (
         <EventDetail inst={dialog.inst} calendar={calendarsById.get(dialog.inst.calendarId)}
           viaCalendar={dialog.inst.via ? calendarsById.get(dialog.inst.via) : null}
-          user={user} tz={tz} onClose={() => setDialog(null)}
+          user={user} tz={tz} onClose={closeDialog}
           onEdit={(inst, secret) => openEdit(inst, secret)} />
       )}
       {dialog?.type === 'newCal' && <NewCalendarDialog user={user} defaultColorIndex={calList.length} onClose={() => setDialog(null)} onCreated={(id) => id && setFocus(id)} />}

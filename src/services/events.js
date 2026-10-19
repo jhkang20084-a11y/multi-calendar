@@ -1,6 +1,6 @@
 import {
   collection, doc, query, where, orderBy, onSnapshot, serverTimestamp, writeBatch, arrayUnion,
-  getDoc, getDocs,
+  arrayRemove, getDoc, getDocs, updateDoc,
 } from 'firebase/firestore';
 import { computeRange, addDays, daysBetween } from '../lib/time.js';
 import { expandEvent, untilBefore, occKeyToDT } from '../lib/recurrence.js';
@@ -223,6 +223,16 @@ export async function deleteRecurringOccurrence(db, user, calId, masterId, maste
     await deleteEventTree(b, db, user, calId, masterId, master);
   }
   await b.commit();
+}
+
+/**
+ * 완료 표시. 반복 일정은 그 회차(occKey)만 완료하고, 반복이 아닌 일정은 일정 자체를 완료한다.
+ */
+export function setOccurrenceCompleted(db, user, calId, eventId, occKey, done) {
+  const patch = occKey
+    ? { completedOccs: done ? arrayUnion(occKey) : arrayRemove(occKey) }
+    : { completed: done };
+  return updateDoc(evRef(db, calId, eventId), { ...patch, updatedAt: serverTimestamp(), updatedBy: user.uid });
 }
 
 export function setCompleted(db, user, calId, eventId, prev, completed) {

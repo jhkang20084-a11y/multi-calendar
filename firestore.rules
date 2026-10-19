@@ -356,7 +356,7 @@ service cloud.firestore {
                                    'color', 'category', 'allDay', 'startMs', 'endMs',
                                    'startDate', 'endDate', 'timeZone', 'rangeStartMs', 'rangeEndMs',
                                    'recurrence', 'exdates', 'recurringEventId', 'originalStart',
-                                   'visibility', 'kind', 'completed', 'reminders', 'showDday', 'milestones',
+                                   'visibility', 'kind', 'completed', 'completedOccs', 'reminders', 'showDday', 'milestones',
                                    'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
             && d.calendarId == calId
             && isStr(d.title, 200)
@@ -378,6 +378,8 @@ service cloud.firestore {
             && d.reminders is list && d.reminders.size() <= 5
             && d.showDday is bool
             && (!('milestones' in d) || d.milestones is bool)
+            // 반복 일정에서 회차별로 완료한 날 (occKey 목록)
+            && (!('completedOccs' in d) || (d.completedOccs is list && d.completedOccs.size() <= 1000))
             // "시간만 공개" 일정은 원본 문서에 세부 내용을 담을 수 없다(secret 하위 문서에 저장).
             && (d.visibility != 'busy'
                 || (d.title == '' && d.description == '' && d.location == '' && d.notes == ''));

@@ -57,8 +57,24 @@ try {
   await p.waitForTimeout(800);
   if (await monthText() !== startMonth) throw new Error(`되돌아오지 않음: ${await monthText()}`);
 
-  step('날짜를 한 번 누르면 그 날짜로 일정 입력 창');
+  step('오늘 날짜에만 동그라미, 형광펜 없음');
+  const todayMarks = await p.locator(`.cell[aria-label^="${today}"] .daynum`).evaluate((el) => ({
+    circle: getComputedStyle(el, '::after').borderTopStyle, marker: getComputedStyle(el, '::before').content,
+  }));
+  if (todayMarks.circle !== 'solid' || todayMarks.marker !== 'none') throw new Error(`오늘 표시 이상: ${JSON.stringify(todayMarks)}`);
+  const other = addDays(today, today.slice(8) === '15' ? 1 : (Number(today.slice(8)) > 15 ? -3 : 3));
+
+  step('날짜를 누르면 그날 일정 목록 창 → 바깥을 누르면 닫힘');
+  await p.locator(`.cell[aria-label^="${other}"] .daynum`).click();
+  await p.getByRole('dialog', { name: `${other} 일정` }).waitFor();
+  const otherCircle = await p.locator(`.cell[aria-label^="${other}"] .daynum`).evaluate((el) => getComputedStyle(el, '::after').content);
+  if (otherCircle !== 'none') throw new Error('누른 날짜에 동그라미가 생김');
+  await p.mouse.click(195, 40); // 창 바깥(위쪽 어두운 부분)
+  await p.getByRole('dialog').waitFor({ state: 'detached' });
+
+  step('날짜 → 그날 목록 → 일정 추가 → 입력 창');
   await p.locator(`.cell[aria-label^="${today}"] .daynum`).click();
+  await p.getByRole('dialog', { name: `${today} 일정` }).getByRole('button', { name: /일정 추가/ }).click();
   await p.locator('.modal', { hasText: '새 일정' }).waitFor();
   const fontSize = await p.locator('.modal input.title-input').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   if (fontSize < 16) throw new Error(`입력칸 글자 ${fontSize}px (iPhone 자동 확대)`);
@@ -76,6 +92,16 @@ try {
   await todo.fill('치실 사기');
   await p.getByRole('button', { name: '저장' }).click();
   await p.locator('.toast-success', { hasText: '일정을 추가했습니다' }).waitFor();
+
+  step('저장 후 그날 목록으로 돌아오고, 목록에서 바로 완료 체크');
+  const dayDlg = p.getByRole('dialog', { name: `${today} 일정` });
+  await dayDlg.locator('.day-item', { hasText: '치과 검진' }).waitFor();
+  await dayDlg.getByRole('checkbox', { name: '치과 검진 완료' }).click();
+  await dayDlg.locator('.day-item .chip-done', { hasText: '치과 검진' }).waitFor();
+  await p.screenshot({ path: 'test-results/feat-day-list.png' });
+  await dayDlg.getByRole('checkbox', { name: '치과 검진 완료' }).click(); // 완료 취소
+  await dayDlg.locator('.day-item .ruled-item:not(.chip-done)', { hasText: '치과 검진' }).waitFor();
+  await p.getByRole('button', { name: '닫기' }).click();
   await p.locator('.modal').waitFor({ state: 'detached' });
   const chip = p.locator('.chip', { hasText: '치과 검진' }).first();
   const color = await chip.evaluate((el) => el.style.getPropertyValue('--c'));
@@ -137,7 +163,7 @@ try {
   // 달력 칸이 꽉 차면 접히므로, 아래 Schedule(오늘 일정) 목록의 색 막대로 확인
   await p.waitForFunction(() => {
     const el = [...document.querySelectorAll('.ruled-item')].find((c) => c.textContent.includes('치과 검진'));
-    return el && getComputedStyle(el.querySelector('.bar')).backgroundColor === 'rgb(155, 135, 196)';
+    return el && el.style.getPropertyValue('--c') === '#9b87c4';
   }, null, { timeout: 10000 });
   await p.screenshot({ path: 'test-results/feat-2-month.png', fullPage: true });
 
@@ -156,8 +182,8 @@ try {
   await p.getByRole('button', { name: '닫기' }).click();
   const sub = p.locator('.ruled-item', { hasText: '치과 검진' }).first();
   await sub.waitFor({ timeout: 10000 });
-  const subColor = await sub.locator('.bar').evaluate((el) => getComputedStyle(el).backgroundColor);
-  if (subColor !== rgb('#d9b44a')) throw new Error(`구독 일정이 구독할 때 고른 색(#d9b44a)이 아님: ${subColor}`);
+  const subColor = await sub.evaluate((el) => el.style.getPropertyValue('--c'));
+  if (subColor !== '#d9b44a') throw new Error(`구독 일정이 구독할 때 고른 색(#d9b44a)이 아님: ${subColor}`);
   if ((await sub.textContent()).includes('🔗')) throw new Error('구독 이모티콘이 남아 있음');
   if (await p.getByRole('button', { name: '구독 관리' }).count()) throw new Error('달력 화면에 구독 관리 버튼이 남아 있음');
   await p.screenshot({ path: 'test-results/feat-3-subscribed.png' });

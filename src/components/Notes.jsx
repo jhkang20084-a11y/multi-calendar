@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DateTime } from 'luxon';
-import { useUi } from './ui.jsx';
+import { useUi, Modal } from './ui.jsx';
 import { db } from '../firebase.js';
 import { groupByDate, whoLabel } from '../lib/feed.js';
 import { formatTime } from '../lib/time.js';
@@ -9,40 +9,73 @@ import { listenMemo, saveMemo } from '../services/memos.js';
 import { canEdit } from '../services/calendars.js';
 import { friendlyError } from '../services/errors.js';
 
-/** 선택한 날의 일정을 줄 노트처럼 보여 준다. */
-export function DayNotes({ date, instances, tz, onOpen, onCreate }) {
-  const list = useMemo(() => groupByDate(instances, date, date).get(date) || [], [instances, date]);
+/** 그날 일정 한 줄: 왼쪽 완료 체크(고칠 수 있는 일정만) + 누르면 일정 열기 */
+function DayItem({ inst, tz, onOpen, canToggle, onToggle }) {
+  return (
+    <li className="day-item">
+      {canToggle(inst) ? (
+        <button type="button" className={`done-check ${inst.done ? 'on' : ''}`} role="checkbox" aria-checked={inst.done}
+          aria-label={`${inst.title} 완료`} style={{ '--c': inst.color }}
+          onClick={(e) => { e.stopPropagation(); onToggle(inst, !inst.done); }}>{inst.done ? '✓' : ''}</button>
+      ) : <span className="done-check placeholder" aria-hidden />}
+      <button type="button" className={`ruled-item ${inst.done ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
+        <span className="time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
+        <span className="main">
+          <span className="title list-title">{inst.title}</span>
+          <span className="sub">{whoLabel(inst)}{inst.location ? ` · ${inst.location}` : ''}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+export function useDayList(instances, date) {
+  return useMemo(() => groupByDate(instances, date, date).get(date) || [], [instances, date]);
+}
+
+/** 그날 일정 목록 (달력 아래 Schedule 과 날짜를 눌렀을 때 뜨는 창에서 함께 씀) */
+export function DayList({ date, instances, tz, onOpen, onCreate, canToggle, onToggle, minLines = 4 }) {
+  const list = useDayList(instances, date);
+  const blanks = Math.max(0, minLines - list.length - (list.length ? 1 : 2));
+  return (
+    <ul className="ruled">
+      {list.map((inst) => <DayItem key={inst.key} inst={inst} tz={tz} onOpen={onOpen} canToggle={canToggle} onToggle={onToggle} />)}
+      {list.length === 0 && <li><span className="ruled-empty">일정이 없어요 ♡</span></li>}
+      <li>
+        <button type="button" className="ruled-item ruled-add" onClick={() => onCreate(date)}>
+          <span className="time">＋</span><span>일정 추가</span>
+        </button>
+      </li>
+      {Array.from({ length: blanks }, (_, i) => <li key={`blank${i}`} aria-hidden />)}
+    </ul>
+  );
+}
+
+function dayTitle(date) {
   const dt = DateTime.fromISO(date).setLocale('ko');
   const hol = holidayOf(date);
-  const lines = Math.max(4, list.length + 1);
+  return <>{dt.toFormat('M월 d일 cccc')}{hol && <span style={{ color: 'var(--red)' }}> · {hol}</span>}</>;
+}
+
+/** 달력 아래: 선택한 날(처음엔 오늘)의 일정 */
+export function DayNotes(props) {
   return (
     <section aria-label="선택한 날의 일정">
       <div className="note-head">
         <h2>Schedule</h2>
-        <span className="note-date">{dt.toFormat('M월 d일 cccc')}{hol && <span style={{ color: 'var(--red)' }}> · {hol}</span>}</span>
+        <span className="note-date">{dayTitle(props.date)}</span>
       </div>
-      <ul className="ruled">
-        {list.map((inst) => (
-          <li key={inst.key}>
-            <button type="button" className={`ruled-item ${inst.ev.completed ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
-              <span className="time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
-              <span className="bar" style={{ background: inst.color }} />
-              <span className="main">
-                <span className="title list-title">{inst.title}</span>
-                <span className="sub">{whoLabel(inst)}{inst.location ? ` · ${inst.location}` : ''}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-        {list.length === 0 && <li><span className="ruled-empty">일정이 없어요 ♡</span></li>}
-        <li>
-          <button type="button" className="ruled-item ruled-add" onClick={() => onCreate(date)}>
-            <span className="time">＋</span><span>이 날에 일정 추가</span>
-          </button>
-        </li>
-        {Array.from({ length: Math.max(0, lines - list.length - (list.length ? 1 : 2)) }, (_, i) => <li key={`blank${i}`} aria-hidden />)}
-      </ul>
+      <DayList {...props} />
     </section>
+  );
+}
+
+/** 날짜를 누르면 뜨는 그날 일정 창. 바깥을 누르면 닫힌다. */
+export function DayDialog({ onClose, ...props }) {
+  return (
+    <Modal title={dayTitle(props.date)} label={`${props.date} 일정`} onClose={onClose}>
+      <DayList {...props} minLines={3} />
+    </Modal>
   );
 }
 

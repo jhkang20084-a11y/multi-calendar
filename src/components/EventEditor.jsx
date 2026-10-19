@@ -318,9 +318,6 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
         </div>
         )}
         {isEdit && (
-          <label className="check"><input type="checkbox" checked={form.completed} onChange={set('completed')} /> 완료한 일정</label>
-        )}
-        {isEdit && (
           <p className="muted small">
             작성: {calendar?.memberInfo?.[existing.ev.createdBy]?.name || '이전 멤버'}
             {existing.ev.updatedBy ? ` · 마지막 수정: ${calendar?.memberInfo?.[existing.ev.updatedBy]?.name || '이전 멤버'}` : ''}

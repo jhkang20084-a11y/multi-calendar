@@ -63,7 +63,7 @@ export function UiProvider({ children }) {
 export const useUi = () => useContext(UiContext);
 
 // ── 모달 ───────────────────────────────────────────────────────────────
-export function Modal({ title, onClose, children, footer, small, wide }) {
+export function Modal({ title, label, onClose, children, footer, small, wide }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -72,7 +72,7 @@ export function Modal({ title, onClose, children, footer, small, wide }) {
   }, [onClose]);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`modal ${small ? 'modal-small' : ''} ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal ${small ? 'modal-small' : ''} ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={label || (typeof title === 'string' ? title : undefined)}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="닫기">✕</button>

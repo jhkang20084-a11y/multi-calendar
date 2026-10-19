@@ -523,3 +523,22 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 
 .modal-foot .footer-left { margin-right: auto; }
 .modal-foot .footer-left + .form-error { margin-right: 0; }
+
+/* 오늘 날짜: 손그림 동그라미만 (형광펜·선택 표시 없음) */
+.cell.today .daynum::before { content: none; }
+.cell.selected .daynum::after { content: none; }
+.cell.today .daynum::after {
+  content: ""; position: absolute; inset: -2px -6px 0; border: 1.5px solid var(--ink); border-radius: 50% 46% 52% 48%; transform: rotate(-4deg);
+}
+.tgrid-day.today .wdnum::before { content: ""; background: none; inset: 1px -2px; border: 1.5px solid var(--ink); border-radius: 50% 46% 52% 48%; transform: rotate(-4deg); }
+.list-day.today h3 .dlabel { background: none; }
+
+/* 그날 일정 목록: 왼쪽 완료 체크 */
+.day-item { gap: 6px; }
+.day-item .ruled-item { flex: 1; min-width: 0; }
+.done-check {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--ink); background: transparent;
+  display: grid; place-items: center; cursor: pointer; font-size: 14px; line-height: 1; color: var(--paper); padding: 0;
+}
+.done-check.on { background: var(--ink); }
+.done-check.placeholder { border-color: transparent; cursor: default; }
