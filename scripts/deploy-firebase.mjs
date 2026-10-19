@@ -120,7 +120,16 @@ execFileSync('npm', ['run', 'holidays:update'], { cwd: root, env, stdio: 'inheri
 execFileSync('npx', ['vite', 'build'], { cwd: root, env, stdio: 'inherit' });
 
 log('배포 (hosting, firestore 규칙, 색인)');
-fb(['deploy', '--only', 'hosting,firestore:rules,firestore:indexes', '--force'], { inherit: true });
+// 네트워크가 불안정하면 일부 파일 업로드가 실패할 수 있다. 이미 올라간 파일은 다시 올리지 않으므로 재시도하면 이어서 진행된다.
+for (let attempt = 1; ; attempt++) {
+  try {
+    fb(['deploy', '--only', 'hosting,firestore:rules,firestore:indexes', '--force'], { inherit: true });
+    break;
+  } catch {
+    if (attempt >= 5) fail('배포에 5번 실패했습니다. 잠시 뒤 다시 실행하거나, 위에 나온 오류를 확인하세요.');
+    console.warn(`\n⚠ 배포 ${attempt}번째 시도 실패 — 이어서 다시 시도합니다 (${attempt + 1}/5)`);
+  }
+}
 
 console.log(`\n✅ 배포 완료: https://${projectId}.web.app`);
 console.log('   (Firestore 색인은 몇 분 뒤에 준비됩니다. 그 전에는 일정 목록이 잠시 비어 보일 수 있습니다.)');
