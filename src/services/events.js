@@ -62,7 +62,8 @@ export function buildEventData(user, calId, input, extra = {}) {
 function putEvent(b, db, user, calId, ref, input, extra, prev, writeSecret = true) {
   const data = buildEventData(user, calId, input, extra);
   if (prev) {
-    b.set(ref, { ...data, createdBy: prev.createdBy, createdAt: prev.createdAt });
+    // 작성자/생성일은 서버 값을 그대로 둔다(update 는 최상위 필드만 통째로 교체).
+    b.update(ref, data);
   } else {
     b.set(ref, { ...data, createdBy: user.uid, createdAt: serverTimestamp() });
   }
