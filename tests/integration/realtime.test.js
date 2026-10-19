@@ -140,7 +140,7 @@ describe('필수 테스트 시나리오', () => {
 
     // 커플 캘린더 보기에 가족 캘린더가 구독 원본으로 포함된다
     const { sources } = resolveFeedSources({ calendars: cals, subscriptions: subs, focus: ctx.couple });
-    expect(sources).toContainEqual({ calendarId: ctx.family, subscribed: true, via: ctx.couple });
+    expect(sources).toContainEqual(expect.objectContaining({ calendarId: ctx.family, subscribed: true, via: ctx.couple, color: '#2a9d8f' }));
 
     const famFeed = live((cb, err) => listenEvents(A.db, A.uid, ctx.family, range, cb, err));
     await famFeed.until((l) => l.length === 0);
