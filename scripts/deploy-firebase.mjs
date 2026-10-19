@@ -17,7 +17,8 @@ const fail = (m) => { console.error(`\n✖ ${m}`); process.exit(1); };
 
 // ── 인증 ────────────────────────────────────────────────────────────────
 let projectId = process.env.FIREBASE_PROJECT_ID;
-const env = { ...process.env };
+// 기본값(동시 업로드 200개)은 느린 회선(Cloud Shell 등)에서 시간 초과로 실패하므로 줄인다.
+const env = { FIREBASE_HOSTING_UPLOAD_CONCURRENCY: '8', ...process.env };
 let key = null;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try { key = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT); } catch { fail('FIREBASE_SERVICE_ACCOUNT 가 올바른 JSON 이 아닙니다(키 파일 내용 전체를 한 줄로 넣어야 합니다).'); }
