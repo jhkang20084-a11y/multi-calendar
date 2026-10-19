@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { holidayOf, holidayFullName, specialDayOf } from '../lib/holidays.js';
 import { DateTime } from 'luxon';
-import { groupByDate, layoutOverlaps, whoLabel } from '../lib/feed.js';
+import { groupByDate, layoutOverlaps, layoutWeek, whoLabel } from '../lib/feed.js';
 import { formatTime, safeZone, addDays } from '../lib/time.js';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -55,19 +55,58 @@ function useSwipe(onSwipe) {
   };
 }
 
+/** 화면 폭에 따라 한 칸에 보일 일정 줄 수 (휴대폰 좁은 화면 2줄, 그 외 3줄) */
+function useMaxLanes() {
+  const get = () => (typeof window !== 'undefined' && window.innerWidth <= 420 ? 2 : 3);
+  const [n, setN] = useState(get);
+  useEffect(() => {
+    const on = () => setN(get());
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return n;
+}
+
+/** 월간 달력의 일정 막대: 여러 날 일정은 이어진 하나의 막대, 제목은 한 번만 */
+function Bar({ bar, tz, onOpen }) {
+  const { inst, startCol, span, lane, contLeft, contRight } = bar;
+  const multi = span > 1 || contLeft || contRight || inst.startDate !== inst.endDate;
+  const cls = ['chip', 'bar', inst.allDay || multi ? 'chip-allday' : 'chip-timed',
+    contLeft ? 'cont-left' : '', contRight ? 'cont-right' : '',
+    inst.ev.completed ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
+  return (
+    <button type="button" className={cls}
+      style={{ '--c': inst.color, '--col': startCol, '--span': span, '--lane': lane }}
+      onClick={(e) => { e.stopPropagation(); onOpen(inst); }}
+      title={`${inst.title} · ${whoLabel(inst)}`}>
+      <span className="chip-title">{inst.title}</span>
+      {!inst.allDay && !multi && <span className="chip-time">{formatTime(inst.startMs, tz)}</span>}
+    </button>
+  );
+}
+
 export function MonthView({
   range, anchorDate, instances, today, tz, weekStartsOn, selectedDate, sketch,
   onOpen, onSelectDate, onCreateAt, onSwipe,
 }) {
   const days = datesBetween(range.startDate, range.endDate);
-  const byDate = useMemo(() => groupByDate(instances, range.startDate, range.endDate), [instances, range.startDate, range.endDate]);
   const month = anchorDate.slice(0, 7);
   const swipe = useSwipe(onSwipe);
+  const maxLanes = useMaxLanes();
   // 마지막 주가 모두 다음 달이면 그리지 않는다(종이 달력처럼 5줄)
   const visible = days.slice(35).every((d) => d.slice(0, 7) !== month) ? days.slice(0, 35) : days;
-  const MAX = 3;
+  const weeks = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < visible.length; i += 7) {
+      const dates = visible.slice(i, i + 7);
+      out.push({ dates, ...layoutWeek(instances, dates, maxLanes) });
+    }
+    return out;
+  }, [instances, visible.join(','), maxLanes]);
+  const byDate = useMemo(() => groupByDate(instances, visible[0], visible[visible.length - 1]), [instances, visible.join(',')]);
+
   return (
-    <div className={`month ${sketch ? 'sketch' : ''}`} {...swipe}>
+    <div className={`month ${sketch ? 'sketch' : ''}`} style={{ '--lanes': maxLanes }} {...swipe}>
       <div className="month-head">
         {weekdayLabels(weekStartsOn).map((w, i) => {
           const dow = (i + weekStartsOn) % 7;
@@ -77,30 +116,32 @@ export function MonthView({
       <div className="month-body">
         <div className="month-lines" aria-hidden>{visible.map((d) => <div key={d} />)}</div>
         <div className="month-grid" role="grid">
-          {visible.map((d) => {
-            const list = byDate.get(d) || [];
-            const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-            const hol = holidayOf(d);
-            const special = !hol && specialDayOf(d);
-            return (
-              <div key={d}
-                className={`cell ${d.slice(0, 7) !== month ? 'other' : ''} ${d === today ? 'today' : ''} ${d === selectedDate ? 'selected' : ''}`}
-                onClick={() => onSelectDate(d)} onDoubleClick={() => onCreateAt(d)}
-                role="gridcell" aria-selected={d === selectedDate} aria-label={`${d}${hol ? ` ${hol}` : ''} 일정 ${list.length}개`}>
-                <div className="cell-top">
-                  <span className={`daynum ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''} ${hol ? 'holiday' : ''}`}>{Number(d.slice(8))}</span>
-                  {hol && <span className="holiday-name" title={holidayFullName(d)}>{hol}</span>}
-                  {special && <span className="holiday-name special">{special}</span>}
-                </div>
-                <div className="cell-events">
-                  {list.slice(0, MAX).map((inst) => (
-                    <Chip key={inst.key} inst={inst} tz={tz} onOpen={onOpen} compact continued={inst.startDate < d} />
-                  ))}
-                  {list.length > MAX && <span className="more">+{list.length - MAX}</span>}
-                </div>
+          {weeks.map((w) => (
+            <div className="week" role="row" key={w.dates[0]}>
+              {w.dates.map((d, col) => {
+                const count = (byDate.get(d) || []).length;
+                const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+                const hol = holidayOf(d);
+                const special = !hol && specialDayOf(d);
+                return (
+                  <div key={d}
+                    className={`cell ${d.slice(0, 7) !== month ? 'other' : ''} ${d === today ? 'today' : ''} ${d === selectedDate ? 'selected' : ''}`}
+                    onClick={() => onSelectDate(d)} onDoubleClick={() => onCreateAt(d)}
+                    role="gridcell" aria-selected={d === selectedDate} aria-label={`${d}${hol ? ` ${hol}` : ''} 일정 ${count}개`}>
+                    <div className="cell-top">
+                      <span className={`daynum ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''} ${hol ? 'holiday' : ''}`}>{Number(d.slice(8))}</span>
+                      {hol && <span className="holiday-name" title={holidayFullName(d)}>{hol}</span>}
+                      {special && <span className="holiday-name special">{special}</span>}
+                    </div>
+                    {w.hidden[col] > 0 && <span className="more">+{w.hidden[col]}</span>}
+                  </div>
+                );
+              })}
+              <div className="week-events">
+                {w.bars.map((bar) => <Bar key={`${bar.inst.key}@${w.dates[0]}`} bar={bar} tz={tz} onOpen={onOpen} />)}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
     </div>

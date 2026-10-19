@@ -121,3 +121,23 @@ describe('기념일 자동 계산과 분류 색', () => {
     expect(eventColor({ category: '' }, cal)).toBe('#123456');
   });
 });
+
+import { layoutWeek } from '../../src/lib/feed.js';
+describe('월간 막대 배치', () => {
+  const week = ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24'];
+  const ev = (key, s, e, allDay = true) => ({ key, startDate: s, endDate: e, allDay, sortMs: 0 });
+  it('여러 날 일정은 막대 하나, 겹치면 다른 줄', () => {
+    const { bars } = layoutWeek([ev('trip', '2026-10-19', '2026-10-21'), ev('a', '2026-10-20', '2026-10-20'), ev('b', '2026-10-22', '2026-10-22')], week, 3);
+    const by = Object.fromEntries(bars.map((b) => [b.inst.key, b]));
+    expect(by.trip).toMatchObject({ startCol: 1, span: 3, lane: 0 });
+    expect(by.a.lane).toBe(1);
+    expect(by.b.lane).toBe(0); // 여행이 끝난 뒤 빈 줄 재사용
+  });
+  it('주를 넘어가는 일정은 이어짐 표시, 줄이 넘치면 칸별로 +n', () => {
+    const { bars, hidden } = layoutWeek([
+      ev('long', '2026-10-15', '2026-10-27'), ev('x', '2026-10-20', '2026-10-20'), ev('y', '2026-10-20', '2026-10-20'),
+    ], week, 2);
+    expect(bars.find((b) => b.inst.key === 'long')).toMatchObject({ startCol: 0, span: 7, contLeft: true, contRight: true });
+    expect(hidden).toEqual([0, 0, 1, 0, 0, 0, 0]);
+  });
+});

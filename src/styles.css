@@ -470,3 +470,27 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 .category-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 52px; border-bottom: 1px solid var(--line); padding: 4px 0; }
 .category-list li input { flex: 1; min-width: 120px; width: auto; }
 .category-colors { width: 100%; padding: 4px 0 8px 42px; }
+
+/* ── 월간: 주 단위 줄 + 이어지는 일정 막대 ─────────────────────────────────── */
+.month { --head-h: 38px; --lane-h: 20px; --week-h: calc(var(--head-h) + var(--lanes) * var(--lane-h) + 18px); }
+.month-grid { display: block; }
+.month-lines { grid-auto-rows: var(--week-h); }
+.week { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); height: var(--week-h); }
+.week .cell { min-height: 0; height: var(--week-h); }
+.week-events { position: absolute; left: 0; right: 0; top: var(--head-h); pointer-events: none; }
+.chip.bar {
+  position: absolute; pointer-events: auto; width: auto;
+  top: calc(var(--lane) * var(--lane-h));
+  left: calc(var(--col) / 7 * 100% + 2px);
+  width: calc(var(--span) / 7 * 100% - 4px);
+  height: calc(var(--lane-h) - 2px); min-height: 0; line-height: calc(var(--lane-h) - 2px);
+  padding: 0 4px; border-radius: 4px;
+}
+.chip.bar.chip-timed { border-radius: 0; }
+.chip.bar.cont-left { left: calc(var(--col) / 7 * 100%); width: calc(var(--span) / 7 * 100% - 2px); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.chip.bar.cont-right { width: calc(var(--span) / 7 * 100% - 2px); border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.chip.bar.cont-left.cont-right { width: calc(var(--span) / 7 * 100%); }
+.chip.bar .chip-time { margin-left: auto; padding-left: 4px; }
+.week .more { position: absolute; bottom: 1px; left: 4px; font-size: 10px; color: var(--muted); }
+@media (min-width: 1000px) { .month { --lane-h: 22px; } }
+@media (max-width: 420px) { .month { --head-h: 36px; --lane-h: 19px; } .chip.bar { font-size: 11px; padding: 0 3px; } }

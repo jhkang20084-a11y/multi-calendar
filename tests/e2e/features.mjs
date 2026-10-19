@@ -72,7 +72,25 @@ try {
   await p.locator('label.field', { hasText: '기념일(시작일)' }).locator('input').fill(addDays(today, -99));
   await p.getByRole('button', { name: '저장' }).click();
   await p.locator('.modal').waitFor({ state: 'detached' });
-  await p.locator(`.cell[aria-label^="${today}"] .chip`, { hasText: '사귄 날 100일' }).waitFor();
+  await p.locator(".week .chip", { hasText: "사귄 날 100일" }).waitFor();
+
+  step('여러 날 일정은 이어진 막대 하나(제목 한 번)로 표시');
+  await p.getByRole('button', { name: '새 일정' }).click();
+  await p.locator('.title-input').fill('제주 여행');
+  await p.locator('label.check', { hasText: '종일' }).locator('input').check();
+  await p.locator('label.field', { hasText: '시작일' }).locator('input').fill(today);
+  await p.locator('label.field', { hasText: '종료일' }).locator('input').fill(addDays(today, 2));
+  await p.getByRole('button', { name: '저장' }).click();
+  await p.locator('.modal').waitFor({ state: 'detached' });
+  const bars = p.locator('.chip.bar', { hasText: '제주 여행' });
+  await bars.first().waitFor();
+  const dow = new Date(`${today}T00:00:00Z`).getUTCDay(); // 일요일 시작 달력
+  const expected = dow + 2 >= 7 ? 2 : 1; // 주가 바뀌면 다음 줄에 이어서 한 번 더
+  if (await bars.count() !== expected) throw new Error(`막대 수 ${await bars.count()} (예상 ${expected})`);
+  const cellW = await p.locator('.week .cell').first().evaluate((el) => el.getBoundingClientRect().width);
+  const barW = await bars.first().evaluate((el) => el.getBoundingClientRect().width);
+  if (expected === 1 && barW < cellW * 2.5) throw new Error(`막대가 3칸에 걸치지 않음 (${barW} / 칸 ${cellW})`);
+  await p.screenshot({ path: 'test-results/feat-0-bars.png' });
 
   step('캘린더 설정(⋯) → 분류 색 변경 → 저장하면 창이 저절로 닫히고 일정 색이 바뀜');
   await p.locator('.menu-btn').click();
@@ -83,9 +101,10 @@ try {
   await p.locator('.category-colors .swatch').nth(7).click(); // 라벤더 #9b87c4
   await p.getByRole('button', { name: '저장' }).click();
   await p.locator('.modal').waitFor({ state: 'detached' });
+  // 달력 칸이 꽉 차면 접히므로, 아래 Schedule(오늘 일정) 목록의 색 막대로 확인
   await p.waitForFunction(() => {
-    const el = [...document.querySelectorAll('.chip')].find((c) => c.textContent.includes('치과 검진'));
-    return el && getComputedStyle(el).borderLeftColor === 'rgb(155, 135, 196)';
+    const el = [...document.querySelectorAll('.ruled-item')].find((c) => c.textContent.includes('치과 검진'));
+    return el && getComputedStyle(el.querySelector('.bar')).backgroundColor === 'rgb(155, 135, 196)';
   }, null, { timeout: 10000 });
   await p.screenshot({ path: 'test-results/feat-2-month.png', fullPage: true });
 
@@ -101,9 +120,9 @@ try {
   await p.locator('.invite-form').getByRole('button', { name: '구독' }).click();
   await p.locator('.toast-success', { hasText: '구독을 시작했습니다' }).waitFor();
   await p.getByRole('button', { name: '닫기' }).click();
-  const sub = p.locator('.chip', { hasText: '치과 검진' }).first();
+  const sub = p.locator('.ruled-item', { hasText: '치과 검진' }).first();
   await sub.waitFor({ timeout: 10000 });
-  const subColor = await sub.evaluate((el) => getComputedStyle(el).borderLeftColor);
+  const subColor = await sub.locator('.bar').evaluate((el) => getComputedStyle(el).backgroundColor);
   if (subColor !== rgb('#6f95c4')) throw new Error(`구독 일정이 원본 캘린더 색(#6f95c4)이 아님: ${subColor}`);
   if ((await sub.textContent()).includes('🔗')) throw new Error('구독 이모티콘이 남아 있음');
   if (await p.getByRole('button', { name: '구독 관리' }).count()) throw new Error('달력 화면에 구독 관리 버튼이 남아 있음');

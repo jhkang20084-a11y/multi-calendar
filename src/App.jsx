@@ -198,7 +198,8 @@ function Main({ user }) {
   const [view, setView] = useState(null);
   useEffect(() => { if (profile && !view) setView(settings.defaultView || 'month'); }, [profile, view, settings.defaultView]);
   const [anchor, setAnchor] = useState(() => todayISO(tz));
-  const [focus, setFocusState] = useState(() => { try { return localStorage.getItem('focus') || 'all'; } catch { return 'all'; } });
+  // 지금 보고 있는 캘린더 (통합 보기 없음: 항상 캘린더 하나)
+  const [focus, setFocusState] = useState(() => { try { return localStorage.getItem('focus') || ''; } catch { return ''; } });
   const setFocus = (f) => { setFocusState(f); try { localStorage.setItem('focus', f); } catch { /* 저장소 사용 불가 */ } };
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -209,14 +210,18 @@ function Main({ user }) {
   const [dialog, setDialog] = useState(null); // {type, ...}
   const [pendingFocus, setPendingFocus] = useState(null);
 
-  // 표시 중이던 캘린더에 접근할 수 없게 되면 통합 보기로
+  // 링크로 막 참여한 캘린더가 목록에 나타나면 그 캘린더로 이동
   useEffect(() => {
     if (calendars && pendingFocus && calendars.some((c) => c.id === pendingFocus)) {
       setFocus(pendingFocus);
       setPendingFocus(null);
       return;
     }
-    if (calendars && focus !== 'all' && !calendars.some((c) => c.id === focus)) setFocus('all');
+    // 고른 캘린더가 없거나 접근할 수 없게 되면 내 개인 캘린더(없으면 첫 캘린더)로
+    if (calendars && calendars.length && !calendars.some((c) => c.id === focus)) {
+      const mine = calendars.find((c) => c.ownerId === user.uid && !c.shared) || calendars[0];
+      setFocus(mine.id);
+    }
   }, [calendars, focus, pendingFocus]);
 
   // 초대 링크로 들어온 경우: 로그인 후 참여 화면 표시

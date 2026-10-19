@@ -190,3 +190,37 @@ export function layoutOverlaps(items) {
   if (cluster.length) flush();
   return result;
 }
+
+/**
+ * 월간 달력의 한 주(7일)에 일정 막대를 배치한다.
+ * 여러 날 일정은 이어진 하나의 막대(제목 한 번)로, 겹치지 않도록 줄(lane)을 나눈다.
+ * 반환: { bars: [{ inst, startCol, span, lane, contLeft, contRight }], hidden: [7개 칸별 숨은 개수] }
+ */
+export function layoutWeek(instances, weekDates, maxLanes) {
+  const first = weekDates[0];
+  const last = weekDates[weekDates.length - 1];
+  const segs = [];
+  for (const inst of instances) {
+    if (inst.endDate < first || inst.startDate > last) continue;
+    const s = inst.startDate < first ? first : inst.startDate;
+    const e = inst.endDate > last ? last : inst.endDate;
+    const startCol = weekDates.indexOf(s);
+    const span = weekDates.indexOf(e) - startCol + 1;
+    if (startCol < 0 || span < 1) continue;
+    segs.push({ inst, startCol, span, contLeft: inst.startDate < first, contRight: inst.endDate > last });
+  }
+  // 먼저 시작하는 것, 긴 것, 종일 일정, 이른 시각 순으로 위쪽 줄에
+  segs.sort((a, b) => a.startCol - b.startCol || b.span - a.span
+    || (b.inst.allDay - a.inst.allDay) || (a.inst.sortMs - b.inst.sortMs));
+  const laneEnds = [];
+  const bars = [];
+  const hidden = Array(weekDates.length).fill(0);
+  for (const seg of segs) {
+    let lane = laneEnds.findIndex((end) => end < seg.startCol);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(-1); }
+    laneEnds[lane] = seg.startCol + seg.span - 1;
+    if (lane < maxLanes) bars.push({ ...seg, lane });
+    else for (let c = seg.startCol; c < seg.startCol + seg.span; c++) hidden[c]++;
+  }
+  return { bars, hidden };
+}

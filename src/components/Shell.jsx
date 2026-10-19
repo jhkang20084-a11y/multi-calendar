@@ -59,11 +59,6 @@ export function Sidebar({
         )}
 
         <nav className="cal-nav">
-          <button className={`cal-item all ${focus === 'all' ? 'active' : ''}`} onClick={() => { setFocus('all'); onCloseMobile(); }}>
-            <span className="cal-color multi" />
-            <span className="cal-name">통합 보기</span>
-            <span className="muted small">{calendars.length - hiddenIds.filter((id) => calendars.some((c) => c.id === id)).length}개 표시</span>
-          </button>
           <div className="cal-section-title">
             <span>MY CALENDARS</span>
             <button className="icon-btn" onClick={andClose(onNewCalendar)} aria-label="새 캘린더">＋</button>
@@ -72,14 +67,11 @@ export function Sidebar({
           {calendars.map((c) => {
             const role = roleOf(c, user.uid);
             const st = statusByCal.get(c.id);
-            const hidden = hiddenIds.includes(c.id);
             return (
               <div key={c.id} className={`cal-item ${focus === c.id ? 'active' : ''}`}>
-                <button className="cal-eye" onClick={() => toggleHidden(c.id)} aria-label={hidden ? '통합 보기에 표시' : '통합 보기에서 숨기기'} title={hidden ? '통합 보기에 표시' : '통합 보기에서 숨기기'}>
-                  <span className="cal-color" style={hidden ? { border: `2px solid ${c.color}`, background: 'transparent' } : { background: c.color }} />
-                </button>
+                <span className="cal-eye" aria-hidden><span className="cal-color" style={{ background: c.color }} /></span>
                 <button className="cal-name-btn" onClick={() => { setFocus(c.id); onCloseMobile(); }}>
-                  <span className={`cal-name ${hidden ? 'muted' : ''}`}>{c.shared ? '' : '🔒 '}{c.name}</span>
+                  <span className="cal-name">{c.shared ? '' : '🔒 '}{c.name}</span>
                   <span className="muted small">
                     {ROLE_LABELS[role]}{c.shared ? ` · ${c.memberIds.length}명` : ''}{subsCountByTarget.get(c.id) ? ` · 🔗${subsCountByTarget.get(c.id)}` : ''}
                     {st?.state === 'error' ? ' · ⚠ 오류' : ''}{overflowIds.includes(c.id) ? ' · 표시 한도 초과' : ''}
