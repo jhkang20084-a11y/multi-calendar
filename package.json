@@ -1,0 +1,33 @@
+{
+  "name": "multi-calendar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Firebase 기반 실시간 멀티 캘린더 웹앱",
+  "scripts": {
+    "dev": "vite",
+    "dev:emu": "vite --mode emulator",
+    "build": "vite build",
+    "preview": "vite preview",
+    "emulators": "firebase emulators:start --only auth,firestore",
+    "test:unit": "vitest run tests/unit",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/rules\"",
+    "test:integration": "firebase emulators:exec --only auth,firestore \"vitest run tests/integration\"",
+    "test": "npm run test:unit && firebase emulators:exec --only auth,firestore \"vitest run tests/rules tests/integration\"",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "firebase-tools": "^15.34.0",
+    "playwright-core": "^1.64.1",
+    "vite": "^6.4.4",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0",
+    "luxon": "^3.7.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

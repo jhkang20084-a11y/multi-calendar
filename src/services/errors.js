@@ -1,0 +1,32 @@
+/** Firebase 오류 코드를 사용자에게 보여 줄 한국어 메시지로 바꾼다. */
+export function friendlyError(e) {
+  const code = e?.code || '';
+  const map = {
+    'permission-denied': '권한이 없습니다. 캘린더 역할을 확인하세요.',
+    'unauthenticated': '로그인이 만료되었습니다. 다시 로그인하세요.',
+    'unavailable': '서버에 연결할 수 없습니다. 네트워크 상태를 확인하세요.',
+    'deadline-exceeded': '요청 시간이 초과되었습니다. 다시 시도하세요.',
+    'not-found': '대상을 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.',
+    'failed-precondition': '현재 상태에서 처리할 수 없습니다. 새로고침 후 다시 시도하세요.',
+    'resource-exhausted': '요청이 너무 많습니다. 잠시 후 다시 시도하세요.',
+    'auth/popup-closed-by-user': '로그인 창이 닫혔습니다.',
+    'auth/network-request-failed': '네트워크 오류로 로그인하지 못했습니다.',
+    'auth/unauthorized-domain': '이 도메인은 Firebase 인증에 등록되지 않았습니다(승인된 도메인 설정 필요).',
+    'app/already-member': '이미 이 캘린더의 멤버입니다.',
+    'app/already-invited': '이미 같은 역할로 초대 중인 사용자입니다.',
+    'app/self-invite': '자기 자신은 초대할 수 없습니다.',
+    'app/invalid-email': '올바른 이메일 주소를 입력하세요.',
+    'app/not-shared': '개인 캘린더는 초대할 수 없습니다. 먼저 공유 캘린더로 전환하세요.',
+    'app/already-subscribed': '이미 구독 중인 캘린더입니다.',
+    'app/self-subscribe': '같은 캘린더는 구독할 수 없습니다.',
+    'app/no-access': '해당 캘린더에 접근 권한이 없습니다.',
+    'app/has-members': '다른 멤버가 있는 캘린더는 개인 캘린더로 바꿀 수 없습니다.',
+  };
+  return map[code] || e?.message || '알 수 없는 오류가 발생했습니다.';
+}
+
+export function appError(code, message) {
+  const e = new Error(message || code);
+  e.code = code;
+  return e;
+}

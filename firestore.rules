@@ -1,0 +1,419 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 멀티 캘린더 Firestore 보안 규칙
+//
+// 데이터 구조
+//   users/{uid}                                     사용자 프로필 + 설정(알림 설정 포함)
+//   calendars/{calId}                               캘린더 정보 + 멤버/역할
+//     ownerId: string, editorIds: [uid], viewerIds: [uid]
+//     memberIds: [uid]  (= ownerId ∪ editorIds ∪ viewerIds, array-contains 조회용)
+//     memberInfo: { uid: {name, email, photoURL} }  (표시용)
+//   calendars/{calId}/invitations/{emailLower}      초대 (문서 ID = 소문자 이메일 → 중복 초대 방지)
+//   calendars/{calId}/events/{eventId}              원본 일정 (복제하지 않음)
+//   calendars/{calId}/events/{eventId}/todos/{id}   일정별 체크리스트
+//   calendars/{calId}/events/{eventId}/secret/detail  "시간만 공개" 일정의 세부 내용(작성자만)
+//   subscriptions/{uid__target__source}             캘린더 구독 관계 (사용자별)
+//
+// 원칙
+//   - 모든 권한은 UID 기준. 클라이언트가 보낸 역할/ownerId 는 규칙에서 다시 검증한다.
+//   - 새 멤버는 오직 "초대 수락" 배치(캘린더 갱신 + 초대 상태 accepted)로만 추가된다.
+//   - 구독 문서는 원본 일정에 대한 권한을 주지 않는다. 일정 읽기는 항상 원본 캘린더 멤버십으로 검사한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 공통 헬퍼 ────────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function emailVerified() { return request.auth.token.email_verified == true; }
+
+    function calPath(calId) { return /databases/$(database)/documents/calendars/$(calId); }
+    function calData(calId) { return get(calPath(calId)).data; }
+    function calAfter(calId) { return getAfter(calPath(calId)).data; }
+    function eventPath(calId, eventId) {
+      return /databases/$(database)/documents/calendars/$(calId)/events/$(eventId);
+    }
+
+    function isMemberOf(cal) { return signedIn() && me() in cal.memberIds; }
+    function isOwnerOf(cal) { return signedIn() && cal.ownerId == me(); }
+    function canEditIn(cal) { return signedIn() && (cal.ownerId == me() || me() in cal.editorIds); }
+
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function stamped() {
+      return request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == me();
+    }
+    function isStr(v, maxLen) { return v is string && v.size() <= maxLen; }
+    function optStr(d, key, maxLen) { return !(key in d) || isStr(d[key], maxLen); }
+
+    // ── users ────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      function validUser(d) {
+        return d.keys().hasOnly(['uid', 'displayName', 'photoURL', 'email', 'emailLower',
+                                 'settings', 'createdAt', 'updatedAt'])
+          && d.uid == userId
+          && isStr(d.displayName, 100)
+          && isStr(d.photoURL, 2000)
+          && isStr(d.email, 320)
+          && d.emailLower == d.email.lower()
+          && d.settings is map
+          && d.settings.keys().hasOnly(['theme', 'timeZone', 'weekStartsOn', 'defaultView',
+                                        'hiddenCalendarIds', 'notifications'])
+          && d.updatedAt == request.time;
+      }
+      allow read: if signedIn() && me() == userId;
+      allow create: if signedIn() && me() == userId && validUser(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && me() == userId && validUser(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    // ── calendars ────────────────────────────────────────────────────────────
+    match /calendars/{calId} {
+
+      function validMemberInfoEntry(e) {
+        return e is map && e.keys().hasOnly(['name', 'email', 'photoURL'])
+          && isStr(e.name, 100) && isStr(e.email, 320) && isStr(e.photoURL, 2000);
+      }
+
+      // 역할 배열이 서로 겹치지 않고 memberIds/memberInfo 와 정확히 일치하는지
+      function membershipConsistent(d) {
+        return d.ownerId is string
+          && d.editorIds is list && d.viewerIds is list && d.memberIds is list
+          && d.memberInfo is map
+          && d.memberIds.size() <= 100
+          && d.memberIds.size() == d.memberIds.toSet().size()
+          && d.memberIds.toSet() == d.editorIds.toSet().union(d.viewerIds.toSet()).union([d.ownerId].toSet())
+          && d.memberIds.size() == d.editorIds.size() + d.viewerIds.size() + 1
+          && !(d.ownerId in d.editorIds) && !(d.ownerId in d.viewerIds)
+          && d.editorIds.toSet().intersection(d.viewerIds.toSet()).size() == 0
+          && d.memberInfo.keys().toSet() == d.memberIds.toSet()
+          // 개인(비공유) 캘린더는 소유자만 멤버일 수 있다.
+          && (d.shared == true || d.memberIds.size() == 1);
+      }
+
+      function validCalendarFields(d) {
+        return d.keys().hasOnly(['name', 'description', 'color', 'coverImage', 'shared',
+                                 'ownerId', 'createdBy', 'editorIds', 'viewerIds', 'memberIds',
+                                 'memberInfo', 'createdAt', 'updatedAt', 'updatedBy'])
+          && isStr(d.name, 60) && d.name.size() > 0
+          && isStr(d.description, 500)
+          && isStr(d.color, 20)
+          && isStr(d.coverImage, 400000)
+          && d.shared is bool;
+      }
+
+      // 1) 소유자의 캘린더 설정 변경
+      function ownerSettingsUpdate() {
+        return isOwnerOf(resource.data)
+          && changed().hasOnly(['name', 'description', 'color', 'coverImage', 'shared',
+                                'updatedAt', 'updatedBy']);
+      }
+
+      // 2) 소유자의 역할 변경/멤버 제거 (새 멤버 추가 불가, 정보 위조 불가)
+      function ownerMembershipUpdate() {
+        let before = resource.data;
+        let after = request.resource.data;
+        return isOwnerOf(before)
+          && changed().hasOnly(['editorIds', 'viewerIds', 'memberIds', 'memberInfo',
+                                'updatedAt', 'updatedBy'])
+          && after.memberIds.toSet().difference(before.memberIds.toSet()).size() == 0
+          && after.memberInfo.diff(before.memberInfo).addedKeys().size() == 0
+          && after.memberInfo.diff(before.memberInfo).changedKeys().size() == 0;
+      }
+
+      // 3) 소유권 이전: 기존 멤버에게 넘기고, 이전 소유자는 편집자로 남는다.
+      function ownerTransfer() {
+        let before = resource.data;
+        let after = request.resource.data;
+        return isOwnerOf(before)
+          && changed().hasOnly(['ownerId', 'editorIds', 'viewerIds', 'updatedAt', 'updatedBy'])
+          && after.ownerId != me()
+          && after.ownerId in before.memberIds
+          && me() in after.editorIds;
+      }
+
+      // 4) 초대 수락: 같은 배치에서 초대 문서가 pending → accepted 로 바뀌어야 한다.
+      function selfJoin() {
+        let before = resource.data;
+        let after = request.resource.data;
+        let invPath = /databases/$(database)/documents/calendars/$(calId)/invitations/$(myEmail());
+        let inv = get(invPath).data;
+        let invAfter = getAfter(invPath).data;
+        let infoDiff = after.memberInfo.diff(before.memberInfo);
+        return signedIn() && emailVerified()
+          && !(me() in before.memberIds)
+          && before.shared == true
+          && inv.status == 'pending'
+          && invAfter.status == 'accepted'
+          && invAfter.respondedBy == me()
+          && changed().hasOnly(['editorIds', 'viewerIds', 'memberIds', 'memberInfo',
+                                'updatedAt', 'updatedBy'])
+          && after.memberIds.toSet() == before.memberIds.toSet().union([me()].toSet())
+          && (inv.role == 'editor'
+                ? (after.editorIds.toSet() == before.editorIds.toSet().union([me()].toSet())
+                   && after.viewerIds.toSet() == before.viewerIds.toSet())
+                : (after.viewerIds.toSet() == before.viewerIds.toSet().union([me()].toSet())
+                   && after.editorIds.toSet() == before.editorIds.toSet()))
+          && infoDiff.addedKeys() == [me()].toSet()
+          && infoDiff.changedKeys().size() == 0
+          && infoDiff.removedKeys().size() == 0
+          && after.memberInfo[me()].email.lower() == myEmail();
+      }
+
+      // 5) 소유자가 아닌 멤버의 캘린더 나가기
+      function selfLeave() {
+        let before = resource.data;
+        let after = request.resource.data;
+        let mine = [me()].toSet();
+        return isMemberOf(before) && before.ownerId != me()
+          && changed().hasOnly(['editorIds', 'viewerIds', 'memberIds', 'memberInfo',
+                                'updatedAt', 'updatedBy'])
+          && after.memberIds.toSet() == before.memberIds.toSet().difference(mine)
+          && after.editorIds.toSet() == before.editorIds.toSet().difference(mine)
+          && after.viewerIds.toSet() == before.viewerIds.toSet().difference(mine)
+          && after.memberInfo.diff(before.memberInfo).affectedKeys() == mine;
+      }
+
+      // 6) 멤버가 자신의 표시 정보(이름/사진)만 갱신
+      function selfInfoUpdate() {
+        let before = resource.data;
+        let after = request.resource.data;
+        return isMemberOf(before)
+          && changed().hasOnly(['memberInfo', 'updatedAt', 'updatedBy'])
+          && after.memberInfo.diff(before.memberInfo).affectedKeys().hasOnly([me()])
+          && after.memberInfo[me()].email == before.memberInfo[me()].email;
+      }
+
+      allow get, list: if signedIn() && me() in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && validCalendarFields(request.resource.data)
+        && membershipConsistent(request.resource.data)
+        && request.resource.data.ownerId == me()
+        && request.resource.data.createdBy == me()
+        && request.resource.data.memberIds == [me()]
+        && request.resource.data.createdAt == request.time
+        && stamped();
+
+      allow update: if signedIn()
+        && validCalendarFields(request.resource.data)
+        && membershipConsistent(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && stamped()
+        && (ownerSettingsUpdate() || ownerMembershipUpdate() || ownerTransfer()
+            || selfJoin() || selfLeave() || selfInfoUpdate());
+
+      allow delete: if isOwnerOf(resource.data);
+
+      // ── invitations ──────────────────────────────────────────────────────
+      match /invitations/{inviteId} {
+        function validInvite(d) {
+          return d.keys().hasOnly(['email', 'role', 'status', 'calendarId', 'calendarName',
+                                   'calendarColor', 'invitedBy', 'invitedByName',
+                                   'createdAt', 'updatedAt', 'respondedAt', 'respondedBy'])
+            && d.email == inviteId
+            && d.email == d.email.lower()
+            && d.email.matches('^[^@\\s/]+@[^@\\s/]+\\.[^@\\s/]+$')
+            && d.role in ['editor', 'viewer']
+            && d.status in ['pending', 'accepted', 'declined', 'canceled']
+            && d.calendarId == calId
+            && isStr(d.calendarName, 60)
+            && isStr(d.calendarColor, 20)
+            && isStr(d.invitedByName, 100);
+        }
+        function isInvitee() {
+          return signedIn() && emailVerified() && resource.data.email == myEmail();
+        }
+
+        allow get, list: if isOwnerOf(calData(calId)) || isInvitee();
+
+        // 소유자: 초대 생성(또는 거절/취소된 초대 재발송)
+        allow create: if isOwnerOf(calData(calId))
+          && calData(calId).shared == true
+          && validInvite(request.resource.data)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.invitedBy == me()
+          && request.resource.data.email != myEmail()
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && !('respondedBy' in request.resource.data);
+
+        allow update: if validInvite(request.resource.data)
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.calendarId == resource.data.calendarId
+          && request.resource.data.updatedAt == request.time
+          && (
+            // 소유자: 역할 변경/재초대(pending) 또는 취소(canceled)
+            (isOwnerOf(calData(calId))
+              && calData(calId).shared == true
+              && request.resource.data.status in ['pending', 'canceled']
+              && request.resource.data.invitedBy == me()
+              && changed().hasOnly(['role', 'status', 'invitedBy', 'invitedByName', 'calendarName',
+                                    'calendarColor', 'createdAt', 'updatedAt',
+                                    'respondedAt', 'respondedBy']))
+            ||
+            // 초대받은 사람: pending → accepted/declined
+            (isInvitee()
+              && resource.data.status == 'pending'
+              && changed().hasOnly(['status', 'respondedAt', 'respondedBy', 'updatedAt'])
+              && request.resource.data.respondedBy == me()
+              && request.resource.data.respondedAt == request.time
+              && (request.resource.data.status == 'declined'
+                  || (request.resource.data.status == 'accepted'
+                      // 같은 배치에서 실제로 해당 역할로 멤버가 되어야 한다.
+                      && (resource.data.role == 'editor'
+                            ? me() in calAfter(calId).editorIds
+                            : me() in calAfter(calId).viewerIds))))
+          );
+
+        allow delete: if isOwnerOf(calData(calId));
+      }
+
+      // ── events ───────────────────────────────────────────────────────────
+      match /events/{eventId} {
+        function validEvent(d) {
+          return d.keys().hasOnly(['calendarId', 'title', 'description', 'location', 'notes',
+                                   'color', 'category', 'allDay', 'startMs', 'endMs',
+                                   'startDate', 'endDate', 'timeZone', 'rangeStartMs', 'rangeEndMs',
+                                   'recurrence', 'exdates', 'recurringEventId', 'originalStart',
+                                   'visibility', 'kind', 'completed', 'reminders', 'showDday',
+                                   'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+            && d.calendarId == calId
+            && isStr(d.title, 200)
+            && isStr(d.description, 5000)
+            && isStr(d.location, 500)
+            && isStr(d.notes, 10000)
+            && isStr(d.color, 20)
+            && isStr(d.category, 40)
+            && d.allDay is bool
+            && d.rangeStartMs is number && d.rangeEndMs is number
+            && d.rangeEndMs >= d.rangeStartMs
+            && isStr(d.timeZone, 64)
+            && (d.recurrence == null || d.recurrence is map)
+            && d.exdates is list && d.exdates.size() <= 1000
+            && (d.recurringEventId == null || isStr(d.recurringEventId, 128))
+            && d.visibility in ['members', 'busy', 'private']
+            && d.kind in ['event', 'anniversary']
+            && d.completed is bool
+            && d.reminders is list && d.reminders.size() <= 5
+            && d.showDday is bool
+            // "시간만 공개" 일정은 원본 문서에 세부 내용을 담을 수 없다(secret 하위 문서에 저장).
+            && (d.visibility != 'busy'
+                || (d.title == '' && d.description == '' && d.location == '' && d.notes == ''));
+        }
+        // 일정 세부 내용을 볼 수 있는가 (비공개/시간만 공개는 작성자만)
+        function canSeeDetails(cal, ev) {
+          return isMemberOf(cal) && (ev.visibility == 'members' || ev.createdBy == me());
+        }
+        // 일정을 수정/삭제할 수 있는가 (편집 권한 + 비공개류는 작성자만)
+        function canModify(cal, ev) {
+          return canEditIn(cal) && (ev.visibility == 'members' || ev.createdBy == me());
+        }
+
+        allow get, list: if isMemberOf(calData(calId))
+          && (resource.data.visibility != 'private' || resource.data.createdBy == me());
+
+        allow create: if canEditIn(calData(calId))
+          && validEvent(request.resource.data)
+          && request.resource.data.createdBy == me()
+          && request.resource.data.createdAt == request.time
+          && stamped();
+
+        allow update: if canModify(calData(calId), resource.data)
+          && canModify(calData(calId), request.resource.data)
+          && validEvent(request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && stamped();
+
+        allow delete: if canModify(calData(calId), resource.data);
+
+        // 시간만 공개(busy) 일정의 실제 제목/내용: 작성자만 읽고 쓴다.
+        match /secret/{docId} {
+          function ownerOfEvent() {
+            let p = eventPath(calId, eventId);
+            let ev = exists(p) ? get(p) : getAfter(p);
+            return ev != null && isMemberOf(calData(calId)) && ev.data.createdBy == me();
+          }
+          allow read, delete: if ownerOfEvent();
+          allow create, update: if ownerOfEvent() && docId == 'detail'
+            && request.resource.data.keys().hasOnly(['title', 'description', 'location', 'notes'])
+            && isStr(request.resource.data.title, 200)
+            && isStr(request.resource.data.description, 5000)
+            && isStr(request.resource.data.location, 500)
+            && isStr(request.resource.data.notes, 10000);
+        }
+
+        // 일정별 체크리스트
+        match /todos/{todoId} {
+          function ev() { return get(eventPath(calId, eventId)).data; }
+          function validTodo(d) {
+            return d.keys().hasOnly(['text', 'done', 'assigneeUid', 'order', 'doneBy', 'doneAt',
+                                     'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+              && isStr(d.text, 500) && d.text.size() > 0
+              && d.done is bool
+              && d.order is number
+              && (d.assigneeUid == null || d.assigneeUid in calData(calId).memberIds);
+          }
+          allow get, list: if canSeeDetails(calData(calId), ev());
+          allow create: if canModify(calData(calId), ev())
+            && validTodo(request.resource.data)
+            && request.resource.data.createdBy == me()
+            && request.resource.data.createdAt == request.time
+            && stamped();
+          allow update: if canModify(calData(calId), ev())
+            && validTodo(request.resource.data)
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && stamped();
+          allow delete: if canModify(calData(calId), ev());
+        }
+      }
+    }
+
+    // 초대받은 사람이 자신의 초대 목록을 조회 (collection group 쿼리)
+    match /{path=**}/invitations/{inviteId} {
+      allow list: if signedIn() && emailVerified() && resource.data.email == myEmail();
+    }
+
+    // ── subscriptions ────────────────────────────────────────────────────────
+    // 구독은 "사용자 A가 target 캘린더 화면에서 source 캘린더 일정을 함께 본다"는 표시 설정일 뿐이다.
+    // 원본 일정 읽기 권한을 부여하지 않는다(일정 읽기는 events 규칙에서 원본 멤버십을 다시 검사).
+    match /subscriptions/{subId} {
+      function validSub(d) {
+        return d.keys().hasOnly(['ownerUid', 'targetCalendarId', 'sourceCalendarId', 'active',
+                                 'createdAt', 'updatedAt'])
+          && d.ownerUid is string && d.targetCalendarId is string && d.sourceCalendarId is string
+          && d.active is bool;
+      }
+      // 존재하지 않는 문서 조회(중복 구독 확인용)는 허용한다. 내용은 없으므로 노출되는 정보가 없다.
+      allow get: if signedIn() && (resource == null || resource.data.ownerUid == me());
+      allow list: if signedIn() && resource.data.ownerUid == me();
+      allow create: if signedIn()
+        && validSub(request.resource.data)
+        && request.resource.data.ownerUid == me()
+        // 문서 ID 를 고정해 같은 대상에 같은 원본을 중복 구독할 수 없게 한다.
+        && subId == me() + '__' + request.resource.data.targetCalendarId + '__'
+                    + request.resource.data.sourceCalendarId
+        && request.resource.data.targetCalendarId != request.resource.data.sourceCalendarId
+        && isMemberOf(calData(request.resource.data.targetCalendarId))
+        && isMemberOf(calData(request.resource.data.sourceCalendarId))
+        && request.resource.data.active == true
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn() && resource.data.ownerUid == me()
+        && validSub(request.resource.data)
+        && changed().hasOnly(['active', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.active == false
+            || isMemberOf(calData(resource.data.sourceCalendarId)));
+      allow delete: if signedIn() && resource.data.ownerUid == me();
+    }
+  }
+}
