@@ -97,3 +97,27 @@ describe('공휴일 (자동 데이터 사본)', () => {
     expect(holidayOf('2027-02-09')).toBe('대체휴일');
   });
 });
+
+import { milestoneInstances } from '../../src/lib/feed.js';
+import { eventColor, DEFAULT_CATEGORIES } from '../../src/lib/categories.js';
+describe('기념일 자동 계산과 분류 색', () => {
+  const anniv = { id: 'a', title: '사귄 날', kind: 'anniversary', allDay: true, startDate: '2026-01-01', endDate: '2026-01-01', recurrence: { freq: 'YEARLY', interval: 1 }, exdates: [], timeZone: 'Asia/Seoul', visibility: 'members', createdBy: 'u', milestones: true };
+  it('100일 단위 표시 (시작일이 1일째)', () => {
+    const r = viewRange('month', '2026-04-01', 'Asia/Seoul', 0);
+    const m = milestoneInstances(anniv, { calendarId: 'c' }, '사귄 날', r);
+    expect(m.map((i) => [i.startDate, i.title])).toEqual([['2026-04-10', '사귄 날 100일']]);
+    expect(milestoneInstances({ ...anniv, milestones: false }, { calendarId: 'c' }, 'x', r)).toEqual([]);
+  });
+  it('매년 N주년 제목', () => {
+    const cal = { id: 'c', name: '커플', color: '#111', memberInfo: { u: { name: '지수' } } };
+    const inst = buildInstances({ eventsByCal: new Map([['c', [anniv]]]), sources: [{ calendarId: 'c', subscribed: false }], calendarsById: new Map([['c', cal]]), range: viewRange('month', '2028-01-01', 'Asia/Seoul', 0), uid: 'u', tz: 'Asia/Seoul' });
+    expect(inst.find((i) => i.startDate === '2028-01-01').title).toBe('사귄 날 2주년');
+    expect(inst[0].ownerName).toBe('지수');
+  });
+  it('분류 색, 구독 일정은 원본 캘린더 색 고정', () => {
+    const cal = { color: '#123456', categories: DEFAULT_CATEGORIES };
+    expect(eventColor({ category: 'hospital' }, cal)).toBe('#e4513a');
+    expect(eventColor({ category: 'hospital' }, cal, true)).toBe('#123456');
+    expect(eventColor({ category: '' }, cal)).toBe('#123456');
+  });
+});

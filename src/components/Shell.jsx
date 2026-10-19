@@ -165,18 +165,18 @@ export function SettingsDialog({ user, profile, onClose }) {
             <button type="button" className={s.gridStyle === 'sketch' ? 'on' : ''} onClick={() => set('gridStyle', 'sketch')}>손그림 선</button>
           </div>
         </div>
-        <label className="field"><span>표시 시간대</span>
+        <label className="field"><span>시간대</span>
           <select value={s.timeZone} onChange={(e) => set('timeZone', e.target.value)}>
             {[...new Set([s.timeZone, ...TIMEZONES])].map((z) => <option key={z}>{z}</option>)}
           </select>
-          <small>일정은 각자의 시간대로 저장되고, 이 시간대 기준으로 표시됩니다.</small>
+          <small>달력 표시와 새 일정 입력에 이 시간대를 씁니다. 해외에 있을 때만 바꾸면 돼요.</small>
         </label>
-        <label className="field"><span>한 주의 시작</span>
-          <select value={s.weekStartsOn} onChange={(e) => set('weekStartsOn', Number(e.target.value))}>
-            <option value={0}>일요일</option>
-            <option value={1}>월요일</option>
-          </select>
-        </label>
+        <div className="field"><span>한 주의 시작</span>
+          <div className="seg">
+            <button type="button" className={Number(s.weekStartsOn) === 0 ? 'on' : ''} onClick={() => set('weekStartsOn', 0)}>일요일 시작</button>
+            <button type="button" className={Number(s.weekStartsOn) === 1 ? 'on' : ''} onClick={() => set('weekStartsOn', 1)}>월요일 시작</button>
+          </div>
+        </div>
         <label className="field"><span>기본 보기</span>
           <select value={s.defaultView} onChange={(e) => set('defaultView', e.target.value)}>
             <option value="month">월간</option><option value="week">주간</option><option value="day">일간</option><option value="list">목록</option>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { DateTime } from 'luxon';
 import { useUi } from './ui.jsx';
 import { db } from '../firebase.js';
-import { groupByDate } from '../lib/feed.js';
+import { groupByDate, whoLabel } from '../lib/feed.js';
 import { formatTime } from '../lib/time.js';
 import { holidayOf } from '../lib/holidays.js';
 import { listenMemo, saveMemo } from '../services/memos.js';
@@ -28,8 +28,8 @@ export function DayNotes({ date, instances, tz, onOpen, onCreate }) {
               <span className="time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
               <span className="bar" style={{ background: inst.color }} />
               <span className="main">
-                <span className="title list-title">{inst.ev.kind === 'anniversary' ? '🎉 ' : ''}{inst.title}</span>
-                <span className="sub">{inst.subscribed ? `🔗 ${inst.calendarName}` : inst.calendarName}{inst.location ? ` · ${inst.location}` : ''}</span>
+                <span className="title list-title">{inst.title}</span>
+                <span className="sub">{whoLabel(inst)}{inst.location ? ` · ${inst.location}` : ''}</span>
               </span>
             </button>
           </li>

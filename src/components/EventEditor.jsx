@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { DateTime } from 'luxon';
-import { Modal, ColorPicker, useUi } from './ui.jsx';
-import { PALETTE } from '../lib/colors.js';
-import { TIMEZONES, msToLocalInput, localInputToMs, safeZone, addDays, daysBetween } from '../lib/time.js';
-import { VISIBILITY_LABELS, createEvent, updateEvent, saveRecurringOccurrence } from '../services/events.js';
+import { Modal, useUi } from './ui.jsx';
+import { msToLocalInput, localInputToMs, safeZone, addDays, daysBetween } from '../lib/time.js';
+import { VISIBILITY_LABELS, createEvent, updateEvent, saveRecurringOccurrence, addTodos } from '../services/events.js';
+import { categoriesOf } from '../lib/categories.js';
+import { naverMapUrl } from '../lib/maps.js';
 import { db } from '../firebase.js';
 
 const WEEKDAY_OPTS = [[1, '월'], [2, '화'], [3, '수'], [4, '목'], [5, '금'], [6, '토'], [7, '일']];
@@ -42,6 +43,7 @@ function toForm(base, defaults) {
     visibility: base?.visibility ?? 'members',
     reminder: base?.reminders?.length ? String(base.reminders[0]) : (defaults.reminder ?? ''),
     showDday: base?.showDday ?? false,
+    milestones: base?.milestones ?? true,
     completed: base?.completed ?? false,
   };
 }
@@ -72,6 +74,7 @@ function toInput(f) {
     visibility: f.visibility,
     reminders: f.reminder === '' ? [] : [Number(f.reminder)],
     showDday: f.showDday,
+    milestones: f.milestones,
     completed: f.completed,
   };
 }
@@ -93,6 +96,14 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [todos, setTodos] = useState([]);
+  const [todoText, setTodoText] = useState('');
+  const calendar = editableCalendars.find((c) => c.id === form.calendarId);
+  const categories = categoriesOf(calendar);
+  const addTodoLine = () => {
+    const t = todoText.trim();
+    if (t) { setTodos((l) => [...l, t]); setTodoText(''); }
+  };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e }));
 
   const isRecurringOcc = isEdit && existing.ev.recurrence && existing.occKey;
@@ -119,9 +130,11 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
     const msg = validate(input);
     if (msg) { setError(msg); return; }
     setError('');
+    // 입력칸에 적고 '추가'를 누르지 않은 할 일도 함께 저장
+    const pendingTodos = todoText.trim() ? [...todos, todoText.trim()] : todos;
     let op;
     if (!isEdit) {
-      op = createEvent(db, user, form.calendarId, input);
+      op = createEvent(db, user, form.calendarId, input, pendingTodos);
     } else if (isRecurringOcc) {
       const scope = await confirm({
         title: '반복 일정 수정',
@@ -136,6 +149,9 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
       op = saveRecurringOccurrence(db, user, existing.calendarId, existing.eventId, existing.ev, existing.occKey, input, scope);
     } else {
       op = updateEvent(db, user, existing.calendarId, existing.eventId, existing.ev, input);
+    }
+    if (isEdit && pendingTodos.length) {
+      op = op.then(() => addTodos(db, user, existing.calendarId, existing.eventId, pendingTodos));
     }
     setSaving(true);
     const result = await write(op, isEdit ? '일정을 수정했습니다.' : '일정을 추가했습니다.');
@@ -158,7 +174,7 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
       <form id="event-form" className="form" onSubmit={onSubmit}>
         <div className="seg">
           <button type="button" className={!anniversary ? 'on' : ''} onClick={() => set('kind')('event')}>일정</button>
-          <button type="button" className={anniversary ? 'on' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'anniversary', allDay: true, repeat: 'YEARLY' }))}>기념일</button>
+          <button type="button" className={anniversary ? 'on' : ''} onClick={() => setForm((f) => ({ ...f, kind: 'anniversary', allDay: true, repeat: 'YEARLY', category: f.category || (categories.some((c) => c.id === 'anniv') ? 'anniv' : '') }))}>기념일</button>
         </div>
         <label className="field">
           <span>캘린더</span>
@@ -204,17 +220,6 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
               <input type="datetime-local" value={form.endLocal} onChange={set('endLocal')} /></label>
           </div>
         )}
-        {!form.allDay && !anniversary && (
-          <label className="field"><span>시간대</span>
-            <select value={form.timeZone} onChange={(e) => {
-              const tz = e.target.value;
-              setForm((f) => ({ ...f, timeZone: tz })); // 입력한 현지 시각은 그대로, 시간대만 변경
-            }}>
-              {[...new Set([form.timeZone, ...TIMEZONES])].map((z) => <option key={z} value={z}>{z}</option>)}
-            </select>
-          </label>
-        )}
-
         {!anniversary && (
           <fieldset className="fieldset">
             <legend>반복</legend>
@@ -257,14 +262,50 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
             {isRecurringOcc && <small>저장할 때 이 일정만 / 이후 일정 / 전체 중에서 선택합니다. "이 일정만"을 고르면 반복 설정 변경은 무시됩니다.</small>}
           </fieldset>
         )}
-        {anniversary && <p className="hint">기념일은 매년 반복되며 D-day 와 며칠째인지가 표시됩니다.</p>}
+        {anniversary && (
+          <>
+            <label className="check"><input type="checkbox" checked={form.milestones} onChange={set('milestones')} /> 100일 단위 기념일 표시 (100일, 200일 …)</label>
+            <p className="hint">매년 같은 날에 "N주년"이 자동으로 표시되고, 사이드 메뉴에 D-day 와 며칠째인지가 나옵니다.</p>
+          </>
+        )}
 
-        <label className="field"><span>장소</span><input value={form.location} onChange={set('location')} maxLength={500} /></label>
+        <div className="field"><span>분류</span>
+          <div className="category-pick" role="radiogroup" aria-label="분류">
+            {categories.map((c) => (
+              <button type="button" key={c.id} role="radio" aria-checked={form.category === c.id}
+                className={form.category === c.id ? 'on' : ''} style={{ '--c': c.color }}
+                onClick={() => setForm((f) => ({ ...f, category: f.category === c.id ? '' : c.id, color: '' }))}>
+                <span className="dot" style={{ background: c.color }} />{c.name}
+              </button>
+            ))}
+          </div>
+          <small>분류에 따라 색이 정해집니다. 분류와 색은 캘린더 설정 &gt; 분류에서 바꿀 수 있어요.</small>
+        </div>
+
+        <label className="field"><span>장소</span><input value={form.location} onChange={set('location')} maxLength={500} placeholder="예: 성수동 카페" /></label>
+        {form.location.trim() && (
+          <a className="map-link" href={naverMapUrl(form.location)} target="_blank" rel="noopener noreferrer">네이버 지도에서 "{form.location.trim()}" 찾아보기 ↗</a>
+        )}
         <label className="field"><span>설명</span><textarea rows={3} value={form.description} onChange={set('description')} maxLength={5000} /></label>
-        <label className="field"><span>메모</span><textarea rows={3} value={form.notes} onChange={set('notes')} maxLength={10000} placeholder="함께 볼 메모 (체크리스트는 저장 후 일정 상세에서 추가)" /></label>
+        <label className="field"><span>메모</span><textarea rows={3} value={form.notes} onChange={set('notes')} maxLength={10000} placeholder="함께 볼 메모" /></label>
 
-        <div className="field"><span>색상</span><ColorPicker value={form.color} onChange={set('color')} palette={PALETTE} allowNone /></div>
-        <label className="field"><span>분류</span><input value={form.category} onChange={set('category')} maxLength={40} placeholder="예: 데이트, 업무, 병원" /></label>
+        <div className="field"><span>할 일{isEdit ? ' 추가' : ''}</span>
+          {todos.length > 0 && (
+            <ul className="todo-draft">
+              {todos.map((t, i) => (
+                <li key={`${i}-${t}`}><span>☐ {t}</span>
+                  <button type="button" className="icon-btn" aria-label={`할 일 ${t} 빼기`} onClick={() => setTodos((l) => l.filter((_, j) => j !== i))}>✕</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="todo-add">
+            <input value={todoText} onChange={(e) => setTodoText(e.target.value)} maxLength={500} placeholder="예: 케이크 예약하기"
+              aria-label="할 일 입력" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTodoLine(); } }} />
+            <button type="button" className="btn btn-small" onClick={addTodoLine}>추가</button>
+          </div>
+          {isEdit && <small>이미 있는 할 일은 일정 상세에서 체크하거나 고칠 수 있어요.</small>}
+        </div>
 
         <label className="field"><span>공개 범위</span>
           <select value={form.visibility} onChange={set('visibility')}

@@ -390,24 +390,19 @@ function Main({ user }) {
           )}
 
           <div className={`masthead ${currentView === 'month' ? '' : 'compact'}`}>
-            <h1 className="month-name">{monthName}</h1>
-            <div className="masthead-sub">
-              <span>{subtitle()}</span>
-              <span aria-hidden>·</span>
-              <button className="cal-switch" onClick={() => setSidebarOpen(true)}>
-                <span className="dot" style={{ background: focusedCal?.color || 'var(--ink)' }} />
-                {focusedCal ? focusedCal.name : `통합 보기 (${feed.sources.length})`}
-                <span className="chev">▼</span>
-              </button>
+            <div className="title-row">
+              <button className="icon-btn nav-arrow" onClick={() => move(-1)} aria-label="이전"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
+              <h1 className="month-name">{monthName}</h1>
+              <button className="icon-btn nav-arrow" onClick={() => move(1)} aria-label="다음"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
             </div>
+            <div className="masthead-sub"><span>{subtitle()}</span></div>
+            {focusedCal && (
+              <button className="icon-btn masthead-more" onClick={() => setDialog({ type: 'calSettings', calId: focusedCal.id })} aria-label="캘린더 설정">⋯</button>
+            )}
           </div>
 
           <div className="controls">
-            <div className="nav-group">
-              <button className="icon-btn" onClick={() => move(-1)} aria-label="이전"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
-              <button className="btn btn-small" onClick={goToday}>오늘</button>
-              <button className="icon-btn" onClick={() => move(1)} aria-label="다음"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
-            </div>
+            <button className="btn btn-small" onClick={goToday}>오늘</button>
             <div className="seg view-seg" role="tablist" aria-label="보기 방식">
               {Object.entries(viewName).map(([v, l]) => (
                 <button key={v} role="tab" aria-selected={currentView === v} className={currentView === v ? 'on' : ''} onClick={() => setView(v)}>{l}</button>
@@ -415,22 +410,13 @@ function Main({ user }) {
             </div>
           </div>
 
-          {(focus !== 'all' || currentView === 'list') && (
+          {currentView === 'list' && (
             <div className="context-bar">
-              {focus !== 'all' && feed.sources.filter((s) => s.subscribed).length > 0 && (
-                <span>구독 {feed.sources.filter((s) => s.subscribed).map((s) => (
-                  <span key={s.calendarId} className="legend-chip" style={{ '--c': calendarsById.get(s.calendarId)?.color }}>🔗 {calendarsById.get(s.calendarId)?.name}</span>
-                ))}</span>
-              )}
-              {focus !== 'all' && <button className="link" onClick={() => setDialog({ type: 'calSettings', calId: focus, tab: 'subs' })}>구독 관리</button>}
-              {focusedCal?.shared && focusedCal.ownerId === user.uid && <button className="link" onClick={() => setDialog({ type: 'calSettings', calId: focus, tab: 'invites' })}>초대</button>}
-              {currentView === 'list' && (
-                <span className="list-range">
-                  <input type="date" value={listFrom} onChange={(e) => setListFrom(e.target.value)} aria-label="시작일" />
-                  ~
-                  <input type="date" value={listTo} min={listFrom} max={addDays(listFrom, 366)} onChange={(e) => setListTo(e.target.value)} aria-label="종료일" />
-                </span>
-              )}
+              <span className="list-range">
+                <input type="date" value={listFrom} onChange={(e) => setListFrom(e.target.value)} aria-label="시작일" />
+                ~
+                <input type="date" value={listTo} min={listFrom} max={addDays(listFrom, 366)} onChange={(e) => setListTo(e.target.value)} aria-label="종료일" />
+              </span>
             </div>
           )}
 
@@ -460,7 +446,7 @@ function Main({ user }) {
               <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
                 selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
                 onOpen={(inst) => setDialog({ type: 'detail', inst })}
-                onSelectDate={setSelectedDate}
+                onSelectDate={(d) => { setSelectedDate(d); openCreate(d); }}
                 onCreateAt={(d) => openCreate(d)}
                 onSwipe={move} />
               <div className="notes-grid">

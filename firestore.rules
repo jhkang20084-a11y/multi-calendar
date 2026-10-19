@@ -100,20 +100,22 @@ service cloud.firestore {
       }
 
       function validCalendarFields(d) {
-        return d.keys().hasOnly(['name', 'description', 'color', 'coverImage', 'shared',
+        return d.keys().hasOnly(['name', 'description', 'color', 'coverImage', 'shared', 'categories',
                                  'ownerId', 'createdBy', 'editorIds', 'viewerIds', 'memberIds',
                                  'memberInfo', 'createdAt', 'updatedAt', 'updatedBy'])
           && isStr(d.name, 60) && d.name.size() > 0
           && isStr(d.description, 500)
           && isStr(d.color, 20)
           && isStr(d.coverImage, 400000)
-          && d.shared is bool;
+          && d.shared is bool
+          // 분류 목록 [{id, name, color}] (최대 20개)
+          && (!('categories' in d) || (d.categories is list && d.categories.size() <= 20));
       }
 
       // 1) 소유자의 캘린더 설정 변경
       function ownerSettingsUpdate() {
         return isOwnerOf(resource.data)
-          && changed().hasOnly(['name', 'description', 'color', 'coverImage', 'shared',
+          && changed().hasOnly(['name', 'description', 'color', 'coverImage', 'shared', 'categories',
                                 'updatedAt', 'updatedBy']);
       }
 
@@ -354,7 +356,7 @@ service cloud.firestore {
                                    'color', 'category', 'allDay', 'startMs', 'endMs',
                                    'startDate', 'endDate', 'timeZone', 'rangeStartMs', 'rangeEndMs',
                                    'recurrence', 'exdates', 'recurringEventId', 'originalStart',
-                                   'visibility', 'kind', 'completed', 'reminders', 'showDday',
+                                   'visibility', 'kind', 'completed', 'reminders', 'showDday', 'milestones',
                                    'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
             && d.calendarId == calId
             && isStr(d.title, 200)
@@ -375,6 +377,7 @@ service cloud.firestore {
             && d.completed is bool
             && d.reminders is list && d.reminders.size() <= 5
             && d.showDday is bool
+            && (!('milestones' in d) || d.milestones is bool)
             // "시간만 공개" 일정은 원본 문서에 세부 내용을 담을 수 없다(secret 하위 문서에 저장).
             && (d.visibility != 'busy'
                 || (d.title == '' && d.description == '' && d.location == '' && d.notes == ''));
@@ -434,7 +437,12 @@ service cloud.firestore {
               && (d.assigneeUid == null || d.assigneeUid in calData(calId).memberIds);
           }
           allow get, list: if canSeeDetails(calData(calId), ev());
-          allow create: if canModify(calData(calId), ev())
+          // 일정을 만들면서 같은 배치로 할 일을 함께 만들 수 있도록, 아직 없는 일정은 배치 후 상태로 확인
+          function evForCreate() {
+            let p = eventPath(calId, eventId);
+            return exists(p) ? get(p).data : getAfter(p).data;
+          }
+          allow create: if canModify(calData(calId), evForCreate())
             && validTodo(request.resource.data)
             && request.resource.data.createdBy == me()
             && request.resource.data.createdAt == request.time

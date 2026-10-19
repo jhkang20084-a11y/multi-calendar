@@ -48,7 +48,8 @@ try {
   await A.locator('.toast-success', { hasText: '캘린더를 만들었습니다' }).waitFor();
 
   step('2. A가 B를 편집자로 초대');
-  await A.getByRole('button', { name: '초대', exact: true }).click();
+  await A.getByRole('button', { name: '캘린더 설정', exact: true }).click();
+  await A.getByRole('tab', { name: '초대' }).click();
   await A.getByPlaceholder('상대방 Google 계정 이메일').fill(B_EMAIL);
   await A.locator('.invite-form').getByRole('button', { name: '초대' }).click();
   await A.locator('.status-pending').waitFor();
@@ -109,16 +110,17 @@ try {
   await A.locator('.dday-item', { hasText: '엄마 생신' }).waitFor();
 
   await A.locator('.cal-name-btn', { hasText: '커플 캘린더' }).click();
-  await A.getByRole('button', { name: '구독 관리' }).click();
+  await A.getByRole('button', { name: '캘린더 설정', exact: true }).click();
+  await A.getByRole('tab', { name: '구독' }).click();
   await A.getByRole('combobox', { name: '구독할 캘린더' }).selectOption({ label: '가족' });
   await A.locator('.invite-form').getByRole('button', { name: '구독' }).click();
-  await A.locator('.toast-success', { hasText: '구독했습니다' }).waitFor();
+  await A.locator('.toast-success', { hasText: '구독을 시작했습니다' }).waitFor();
   await A.getByRole('button', { name: '닫기' }).click();
-  await A.locator('.chip-sub', { hasText: '엄마 생신' }).first().waitFor({ timeout: 10000 });
+  await A.locator('.chip', { hasText: /엄마 생신 \d+주년/ }).first().waitFor({ timeout: 10000 });
   await shot(A, '07-a-subscribed-view');
 
   step('8. 원본(가족)에서 제목 변경 → 구독 화면 반영');
-  await A.locator('.chip-sub', { hasText: '엄마 생신' }).first().click();
+  await A.locator('.chip', { hasText: /엄마 생신 \d+주년/ }).first().click();
   await A.locator('.source-box', { hasText: '가족' }).waitFor();
   await A.getByRole('button', { name: '수정', exact: true }).click();
   await A.getByPlaceholder(/사귄 날/).fill('엄마 생신 🎂');
@@ -126,7 +128,7 @@ try {
   // 반복(매년) 일정이므로 범위 선택
   await A.getByRole('button', { name: '모든 반복 일정' }).click();
   await A.locator('.toast-success', { hasText: '일정을 수정했습니다' }).waitFor();
-  await A.locator('.chip-sub', { hasText: '엄마 생신 🎂' }).first().waitFor();
+  await A.locator('.chip', { hasText: '엄마 생신 🎂' }).first().waitFor();
 
   step('주간 / 목록 보기, 다크 모드');
   await A.getByRole('tab', { name: '주' }).click();
@@ -230,7 +232,9 @@ try {
   await B.waitForFunction(() => document.querySelector('textarea.memo-area')?.value.includes('단풍'), null, { timeout: 10000 });
   if (!(await B.locator('textarea.memo-area').evaluate((el) => el.readOnly))) throw new Error('열람자 메모가 편집 가능');
   const today2 = await A.evaluate(() => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }));
+  // 열람자는 날짜를 눌러도 일정을 만들 수 있는 캘린더만 고를 수 있다(개인 캘린더). 닫으면 그날 일정이 보인다.
   await B.locator(`.cell[aria-label^="${today2}"] .daynum`).click();
+  if (await B.locator('.modal').count()) await B.getByRole('button', { name: '닫기' }).click();
   await B.locator('.ruled-item', { hasText: '저녁 데이트' }).waitFor();
   await shot(B, '14-b-memo-schedule');
 

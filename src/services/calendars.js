@@ -3,6 +3,7 @@ import {
   setDoc, deleteField, getDocs, writeBatch, deleteDoc,
 } from 'firebase/firestore';
 import { appError } from './errors.js';
+import { DEFAULT_CATEGORIES, cleanCategories } from '../lib/categories.js';
 
 export const ROLE_LABELS = { owner: '소유자', editor: '편집자', viewer: '열람자' };
 
@@ -32,6 +33,7 @@ export function newCalendarDoc(user, { name, description = '', color = '#4f6bed'
     color,
     coverImage,
     shared: Boolean(shared),
+    categories: DEFAULT_CATEGORIES,
     ownerId: user.uid,
     createdBy: user.uid,
     editorIds: [],
@@ -63,9 +65,10 @@ export function listenMyCalendars(db, uid, cb, onError) {
 
 export async function updateCalendarSettings(db, user, calId, patch, currentCal) {
   const allowed = {};
-  for (const k of ['name', 'description', 'color', 'coverImage', 'shared']) {
+  for (const k of ['name', 'description', 'color', 'coverImage', 'shared', 'categories']) {
     if (k in patch) allowed[k] = patch[k];
   }
+  if ('categories' in allowed) allowed.categories = cleanCategories(allowed.categories);
   if ('name' in allowed) {
     allowed.name = allowed.name.trim().slice(0, 60);
     if (!allowed.name) throw appError('app/invalid-name', '캘린더 이름을 입력하세요.');

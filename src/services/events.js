@@ -50,6 +50,8 @@ export function buildEventData(user, calId, input, extra = {}) {
     completed: Boolean(input.completed),
     reminders: (input.reminders || []).slice(0, 5).map(Number),
     showDday: anniversary ? true : Boolean(input.showDday),
+    // 기념일: 100일 단위(100일, 200일 …) 자동 표시 여부. 1년 단위(주년)는 항상 표시.
+    milestones: anniversary ? input.milestones !== false : false,
     updatedBy: user.uid,
     updatedAt: serverTimestamp(),
   };
@@ -72,12 +74,31 @@ function putEvent(b, db, user, calId, ref, input, extra, prev, writeSecret = tru
   return data;
 }
 
-export async function createEvent(db, user, calId, input) {
+/** 일정 만들기. todos(할 일 문장 목록)를 주면 같은 배치로 체크리스트도 함께 만든다. */
+export async function createEvent(db, user, calId, input, todos = []) {
   const ref = doc(evCol(db, calId));
   const b = writeBatch(db);
   putEvent(b, db, user, calId, ref, input, {}, null);
+  addTodosToBatch(b, user, ref, todos);
   await b.commit();
   return ref.id;
+}
+
+function addTodosToBatch(b, user, eventRef, todos) {
+  todos.map((t) => String(t).trim()).filter(Boolean).slice(0, 50).forEach((text, i) => {
+    b.set(doc(collection(eventRef, 'todos')), {
+      text: text.slice(0, 500), done: false, assigneeUid: null, order: Date.now() + i,
+      doneBy: null, doneAt: null, createdBy: user.uid, createdAt: serverTimestamp(),
+      updatedBy: user.uid, updatedAt: serverTimestamp(),
+    });
+  });
+}
+
+/** 이미 있는 일정에 할 일 여러 개를 한 번에 추가 */
+export function addTodos(db, user, calId, eventId, todos) {
+  const b = writeBatch(db);
+  addTodosToBatch(b, user, evRef(db, calId, eventId), todos);
+  return b.commit();
 }
 
 /** 단일 일정(또는 반복 전체) 수정. prev 는 현재 저장된 원본 문서 데이터. */

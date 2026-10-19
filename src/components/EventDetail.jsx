@@ -5,6 +5,7 @@ import { listenEvent, getSecret, deleteEvent, deleteRecurringOccurrence, setComp
 import { listenTodos, addTodo, toggleTodo, updateTodo, deleteTodo } from '../services/todos.js';
 import { canEdit, ROLE_LABELS, roleOf } from '../services/calendars.js';
 import { describeRecurrence } from '../lib/recurrence.js';
+import { naverMapUrl } from '../lib/maps.js';
 import { formatTime, formatDateLabel, safeZone, msToDate, todayISO } from '../lib/time.js';
 import { ddayLabel, anniversarySummary } from '../lib/dday.js';
 import { friendlyError } from '../services/errors.js';
@@ -176,31 +177,33 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
       {error && <p className="form-error">{error}</p>}
       <div className="detail">
         <div className="detail-title">
-          <span className="dot" style={{ background: ev.color || calendar?.color }} />
-          <h3 className={ev.completed ? 'strike' : ''}>{ev.kind === 'anniversary' ? '🎉 ' : ''}{title}</h3>
+          <span className="dot" style={{ background: inst.color || calendar?.color }} />
+          <h3 className={ev.completed ? 'strike' : ''}>{inst.virtual ? inst.title : title}</h3>
         </div>
         <p className="detail-when">{whenText(when, zone)}{!when.allDay && ev.timeZone !== zone && <span className="muted"> (일정 시간대: {ev.timeZone})</span>}</p>
         {ev.recurrence && <p className="muted">🔁 {describeRecurrence(ev.recurrence)}</p>}
         {ev.recurringEventId && <p className="muted">🔁 반복 일정에서 개별 수정된 회차</p>}
+        {inst.virtual && <p className="muted">"{title}"부터 {inst.milestoneDays.toLocaleString('ko-KR')}일째 되는 날 (자동 계산)</p>}
         {anniv && <p className="dday-line">{anniv.countLabel} · 다음 {anniv.nextYearly.years}주년 {anniv.nextYearlyLabel}{anniv.milestone && ` · ${anniv.milestone.days}일 ${ddayLabel(anniv.milestone.date, today)}`}</p>}
         {!anniv && ev.showDday && <p className="dday-line">{ddayLabel(when.startDate, today)}</p>}
 
         <div className="source-box">
           <span className="dot" style={{ background: calendar?.color }} />
           <span>
-            {inst.subscribed
-              ? <>🔗 <b>{calendar?.name}</b>에서 구독 중{viaCalendar ? ` → ${viaCalendar.name}에 표시` : ''}</>
-              : <b>{calendar?.name}</b>}
-            <span className="muted"> · 내 역할: {ROLE_LABELS[role] || '없음'}</span>
+            <b>{calendar?.name}</b>
+            {members[ev.createdBy]?.name && <span> · {members[ev.createdBy].name}님 일정</span>}
+            {inst.subscribed && viaCalendar && <span className="muted"> · {viaCalendar.name}에서 함께 보는 중</span>}
           </span>
         </div>
-        {inst.subscribed && !editable && <p className="hint">구독한 원본 일정입니다. 원본 캘린더 편집 권한이 없어 읽기 전용으로 표시됩니다.</p>}
+        {!editable && <p className="muted small">내 역할: {ROLE_LABELS[role] || '없음'} — 이 일정은 볼 수만 있어요.</p>}
 
         {canSeeDetails ? (
           <>
-            {shown.location && <p>📍 {shown.location}</p>}
+            {shown.location && (
+              <p>📍 <a className="map-link" href={naverMapUrl(shown.location)} target="_blank" rel="noopener noreferrer">{shown.location} <span className="small">(네이버 지도)</span></a></p>
+            )}
             {shown.description && <p className="pre">{shown.description}</p>}
-            {ev.category && <p><span className="tag">{ev.category}</span></p>}
+            {inst.categoryName && <p><span className="tag" style={{ borderColor: inst.color }}>{inst.categoryName}</span></p>}
             {shown.notes && (<div className="notes"><strong>메모</strong><p className="pre">{shown.notes}</p></div>)}
           </>
         ) : (

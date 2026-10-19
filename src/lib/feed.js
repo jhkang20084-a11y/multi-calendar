@@ -1,5 +1,6 @@
 import { expandEvent } from './recurrence.js';
-import { msToDate, safeZone } from './time.js';
+import { msToDate, safeZone, addDays, daysBetween } from './time.js';
+import { eventColor, categoryOf } from './categories.js';
 
 // 동시에 실시간으로 구독(onSnapshot)할 캘린더 수 상한. 캘린더당 쿼리 2개를 연다.
 export const MAX_LIVE_CALENDARS = 20;
@@ -61,22 +62,31 @@ export function buildInstances({ eventsByCal, sources, calendarsById, range, uid
           .filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) continue;
       }
+      const base = {
+        calendarId: src.calendarId,
+        eventId: ev.id,
+        ev,
+        allDay: ev.allDay,
+        subscribed: src.subscribed,
+        via: src.via,
+        calendarName: cal.name,
+        // 누구 일정인지 (작성자 이름)
+        ownerName: cal.memberInfo?.[ev.createdBy]?.name || '',
+        color: eventColor(ev, cal, src.subscribed),
+        calendarColor: cal.color,
+        categoryName: categoryOf(cal, ev.category)?.name || '',
+        hiddenDetails: ev.visibility === 'busy' && !mine,
+        location: ev.visibility === 'busy' ? (secret?.location || '') : ev.location,
+      };
+      if (ev.kind === 'anniversary') out.push(...milestoneInstances(ev, base, title, range));
       for (const o of expandEvent(ev, range)) {
+        const years = ev.kind === 'anniversary' && o.occKey ? Number(o.startDate.slice(0, 4)) - Number(ev.startDate.slice(0, 4)) : 0;
         const inst = {
+          ...base,
           key: `${src.calendarId}/${ev.id}/${o.occKey ?? ''}`,
-          calendarId: src.calendarId,
-          eventId: ev.id,
           occKey: o.occKey,
-          ev,
-          title,
-          allDay: ev.allDay,
-          subscribed: src.subscribed,
-          via: src.via,
-          calendarName: cal.name,
-          color: ev.color || cal.color,
-          calendarColor: cal.color,
-          hiddenDetails: ev.visibility === 'busy' && !mine,
-          location: ev.visibility === 'busy' ? (secret?.location || '') : ev.location,
+          // 기념일은 매년 "N주년"을 자동으로 붙인다(첫 해 당일은 제목 그대로)
+          title: years > 0 ? `${title} ${years}주년` : title,
         };
         if (ev.allDay) {
           inst.startDate = o.startDate;
@@ -96,6 +106,42 @@ export function buildInstances({ eventsByCal, sources, calendarsById, range, uid
   }
   out.sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1
     : (b.allDay - a.allDay) || (a.sortMs - b.sortMs) || a.title.localeCompare(b.title)));
+  return out;
+}
+
+/** 일정 아래 작은 글씨: 어느 캘린더의, 누구 일정인지 */
+export function whoLabel(inst) {
+  const name = inst.ownerName && inst.ownerName !== inst.calendarName ? inst.ownerName : '';
+  return [inst.calendarName, name].filter(Boolean).join(' · ');
+}
+
+/**
+ * 기념일의 100일 단위 날(100일, 200일 …)을 화면 범위 안에서 만든다. 시작한 날이 1일째.
+ * 저장하지 않는 표시용 일정이며, 누르면 원래 기념일을 연다.
+ */
+export function milestoneInstances(ev, base, title, range) {
+  if (ev.milestones === false || !ev.allDay || !ev.startDate) return [];
+  const out = [];
+  const first = Math.max(1, Math.ceil((daysBetween(ev.startDate, range.startDate) + 1) / 100));
+  for (let k = first; k < first + 60; k++) {
+    const n = k * 100;
+    const date = addDays(ev.startDate, n - 1);
+    if (date > range.endDate) break;
+    if (date < range.startDate) continue;
+    // 1년 단위 기념일과 같은 날이면 주년 표시를 우선한다
+    if (date.slice(5) === ev.startDate.slice(5)) continue;
+    out.push({
+      ...base,
+      key: `${base.calendarId}/${ev.id}/d${n}`,
+      occKey: null,
+      virtual: true,
+      milestoneDays: n,
+      title: `${title} ${n.toLocaleString('ko-KR')}일`,
+      startDate: date,
+      endDate: date,
+      sortMs: Date.parse(`${date}T00:00:00Z`),
+    });
+  }
   return out;
 }
 

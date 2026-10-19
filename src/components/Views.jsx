@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { holidayOf, holidayFullName, specialDayOf } from '../lib/holidays.js';
 import { DateTime } from 'luxon';
-import { groupByDate, layoutOverlaps } from '../lib/feed.js';
+import { groupByDate, layoutOverlaps, whoLabel } from '../lib/feed.js';
 import { formatTime, safeZone, addDays } from '../lib/time.js';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -18,18 +18,17 @@ function datesBetween(start, end) {
   return out;
 }
 
-/** 일정 칩: 원본 캘린더 색 + 구독 일정은 점선 테두리/🔗 표시 */
+/** 일정 칩: 색(분류 색, 구독 일정은 원본 캘린더 색) + 제목 */
 function Chip({ inst, tz, onOpen, compact, continued }) {
   const style = { '--c': inst.color };
-  const cls = ['chip', inst.allDay ? 'chip-allday' : 'chip-timed', inst.subscribed ? 'chip-sub' : '',
+  const cls = ['chip', inst.allDay ? 'chip-allday' : 'chip-timed',
     inst.ev.completed ? 'chip-done' : '', inst.hiddenDetails ? 'chip-busy' : ''].join(' ');
   return (
     <button type="button" className={cls} style={style} onClick={(e) => { e.stopPropagation(); onOpen(inst); }}
-      title={`${inst.title} · ${inst.calendarName}${inst.subscribed ? ' (구독)' : ''}`}>
-      {inst.subscribed && <span className="chip-sub-icon" aria-label="구독 일정">🔗</span>}
+      title={`${inst.title} · ${whoLabel(inst)}`}>
       {!inst.allDay && !compact && <span className="chip-time">{formatTime(inst.startMs, tz)}</span>}
       {continued && <span aria-hidden>›</span>}
-      <span className="chip-title">{inst.ev.kind === 'anniversary' ? '🎉 ' : ''}{inst.title}</span>
+      <span className="chip-title">{inst.title}</span>
     </button>
   );
 }
@@ -38,14 +37,20 @@ function Chip({ inst, tz, onOpen, compact, continued }) {
 function useSwipe(onSwipe) {
   const start = useRef(null);
   return {
-    onTouchStart: (e) => { const t = e.touches[0]; start.current = { x: t.clientX, y: t.clientY }; },
+    onTouchStart: (e) => {
+      if (e.touches.length !== 1) { start.current = null; return; }
+      const t = e.touches[0];
+      start.current = { x: t.clientX, y: t.clientY, at: Date.now() };
+    },
     onTouchEnd: (e) => {
       if (!start.current) return;
       const t = e.changedTouches[0];
       const dx = t.clientX - start.current.x;
       const dy = t.clientY - start.current.y;
+      const quick = Date.now() - start.current.at < 600;
       start.current = null;
-      if (Math.abs(dx) > 60 && Math.abs(dy) < 50) onSwipe(dx < 0 ? 1 : -1);
+      // 의도한 빠르고 확실한 좌우 밀기만 월 이동으로 처리 (살짝 스치는 것은 무시)
+      if (quick && Math.abs(dx) > 90 && Math.abs(dy) < 40 && Math.abs(dx) > Math.abs(dy) * 3) onSwipe(dx < 0 ? 1 : -1);
     },
   };
 }
@@ -177,13 +182,13 @@ export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt, o
                 const inst = it.inst;
                 return (
                   <button type="button" key={it.key}
-                    className={`tevent ${inst.subscribed ? 'chip-sub' : ''} ${inst.ev.completed ? 'chip-done' : ''} ${inst.hiddenDetails ? 'chip-busy' : ''}`}
+                    className={`tevent ${inst.ev.completed ? 'chip-done' : ''} ${inst.hiddenDetails ? 'chip-busy' : ''}`}
                     style={{ top: it.top, height: it.bottom - it.top - 2, left: `calc(${pos.col * width}% + 2px)`, width: `calc(${width}% - 4px)`, '--c': inst.color }}
                     onClick={(e) => { e.stopPropagation(); onOpen(inst); }}
-                    title={`${inst.title} · ${inst.calendarName}`}>
-                    <span className="tevent-title">{inst.subscribed ? '🔗 ' : ''}{inst.title}</span>
+                    title={`${inst.title} · ${whoLabel(inst)}`}>
+                    <span className="tevent-title">{inst.title}</span>
                     <span className="tevent-time">{formatTime(inst.startMs, tz)}–{formatTime(inst.endMs, tz)}</span>
-                    {inst.subscribed && <span className="tevent-src">{inst.calendarName}</span>}
+                    {inst.subscribed && <span className="tevent-src">{whoLabel(inst)}</span>}
                   </button>
                 );
               })}
@@ -211,9 +216,9 @@ export function ListView({ instances, range, today, tz, onOpen, emptyText }) {
                 <span className="list-color" style={{ background: inst.color }} />
                 <span className="list-time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
                 <span className="list-main">
-                  <span className="list-title">{inst.ev.kind === 'anniversary' ? '🎉 ' : ''}{inst.title}</span>
+                  <span className="list-title">{inst.title}</span>
                   <span className="list-sub">
-                    {inst.subscribed ? `🔗 구독 · ${inst.calendarName}` : inst.calendarName}
+                    {whoLabel(inst)}
                     {inst.location ? ` · ${inst.location}` : ''}
                   </span>
                 </span>

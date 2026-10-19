@@ -28,7 +28,8 @@ try {
   await A.locator('.toast-success', { hasText: '캘린더를 만들었습니다' }).waitFor();
 
   step('A가 열람자 링크 만들기 → 링크 복사');
-  await A.getByRole('button', { name: '초대', exact: true }).click();
+  await A.getByRole('button', { name: '캘린더 설정', exact: true }).click();
+  await A.getByRole('tab', { name: '초대' }).click();
   await A.getByRole('combobox', { name: '링크 역할' }).selectOption('viewer');
   await A.getByRole('button', { name: '링크 만들고 보내기' }).click();
   await A.locator('.toast-success', { hasText: '링크를 복사했습니다' }).waitFor();
@@ -49,7 +50,7 @@ try {
   await C.screenshot({ path: 'test-results/link-3-join.png' });
   await C.getByRole('button', { name: '참여하기' }).click();
   await C.locator('.toast-success', { hasText: '독서 모임에 참여했습니다' }).waitFor();
-  await C.locator('.cal-switch', { hasText: '독서 모임' }).waitFor({ timeout: 10000 });
+  await C.locator('.cal-item.active', { hasText: '독서 모임' }).waitFor({ state: 'attached', timeout: 10000 });
 
   step('A 화면 멤버 목록에 C가 열람자로 표시');
   await A.locator('.cal-item', { hasText: '독서 모임' }).getByRole('button', { name: /설정/ }).click();

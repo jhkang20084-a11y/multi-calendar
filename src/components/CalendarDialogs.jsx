@@ -13,6 +13,7 @@ import {
 import { subscribe, unsubscribe, setSubscriptionActive } from '../services/subscriptions.js';
 import { createInviteLink, listenInviteLinks, deleteInviteLink, inviteUrl, LINK_DAYS } from '../services/inviteLinks.js';
 import { subscriptionStatus } from '../lib/feed.js';
+import { categoriesOf, MAX_CATEGORIES } from '../lib/categories.js';
 import { friendlyError } from '../services/errors.js';
 
 function CoverPicker({ value, color, onChange }) {
@@ -103,12 +104,14 @@ function InfoTab({ cal, user, onClose }) {
       setSaving(true);
       let op;
       try { op = updateCalendarSettings(db, user, cal.id, f, cal); } catch (err) { op = Promise.reject(err); }
-      await write(op, '캘린더 설정을 저장했습니다.');
+      const r = await write(op, '캘린더 설정을 저장했습니다.');
       setSaving(false);
+      if (r !== 'error') onClose();
     }}>
       <label className="field"><span>이름</span><input maxLength={60} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
       <label className="field"><span>설명</span><input maxLength={500} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></label>
-      <div className="field"><span>대표 색상</span><ColorPicker value={f.color} onChange={(c) => setF({ ...f, color: c })} palette={PALETTE} /></div>
+      <div className="field"><span>대표 색상</span><ColorPicker value={f.color} onChange={(c) => setF({ ...f, color: c })} palette={PALETTE} />
+        <small>다른 캘린더에서 이 캘린더를 구독하면, 이 캘린더 일정은 분류와 상관없이 이 색으로 보입니다.</small></div>
       <div className="field">
         <span>종류</span>
         <div className="seg">
@@ -293,7 +296,7 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
       <form className="invite-form" onSubmit={async (e) => {
         e.preventDefault();
         if (!source) return;
-        if (await write(subscribe(db, user, cal.id, source, calendars), `${nameOf(source)} 캘린더를 구독했습니다.`) !== 'error') setSource('');
+        if (await write(subscribe(db, user, cal.id, source, calendars), `"${nameOf(source)}" 구독을 시작했습니다.`) !== 'error') setSource('');
       }}>
         <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="구독할 캘린더">
           <option value="">구독할 캘린더 선택</option>
@@ -326,18 +329,71 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
   );
 }
 
+function CategoriesTab({ cal, user, onClose }) {
+  const { write } = useUi();
+  const owner = roleOf(cal, user.uid) === 'owner';
+  const [list, setList] = useState(() => categoriesOf(cal).map((c) => ({ ...c })));
+  const [picking, setPicking] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const update = (i, patch) => setList((l) => l.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  if (!owner) {
+    return (
+      <div>
+        <ul className="category-list">
+          {categoriesOf(cal).map((c) => <li key={c.id}><span className="dot" style={{ background: c.color }} />{c.name}</li>)}
+        </ul>
+        <p className="hint">분류와 색은 소유자가 정합니다.</p>
+      </div>
+    );
+  }
+  return (
+    <form className="form" onSubmit={async (e) => {
+      e.preventDefault();
+      setSaving(true);
+      const r = await write(updateCalendarSettings(db, user, cal.id, { categories: list }, cal), '분류를 저장했습니다.');
+      setSaving(false);
+      if (r !== 'error') onClose();
+    }}>
+      <p className="hint">일정을 만들 때 고르는 분류입니다. 분류마다 색이 정해져 있어 일정 색이 자동으로 바뀝니다.</p>
+      <ul className="category-list">
+        {list.map((c, i) => (
+          <li key={c.id}>
+            <button type="button" className="swatch" style={{ background: c.color }} aria-label={`${c.name} 색 바꾸기`}
+              onClick={() => setPicking(picking === i ? null : i)} />
+            <input value={c.name} maxLength={20} aria-label="분류 이름" onChange={(e) => update(i, { name: e.target.value })} />
+            <button type="button" className="icon-btn" aria-label={`${c.name} 분류 삭제`} onClick={() => setList((l) => l.filter((_, j) => j !== i))}>🗑</button>
+            {picking === i && (
+              <div className="category-colors">
+                <ColorPicker value={c.color} palette={PALETTE} onChange={(color) => { update(i, { color }); setPicking(null); }} />
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      {list.length < MAX_CATEGORIES && (
+        <button type="button" className="btn btn-small" onClick={() => setList((l) => [...l, {
+          id: `c${Date.now().toString(36)}`, name: '새 분류', color: PALETTE[l.length % PALETTE.length],
+        }])}>＋ 분류 추가</button>
+      )}
+      <small className="muted">분류를 지우면 그 분류였던 일정은 캘린더 대표 색으로 보입니다.</small>
+      <button className="btn btn-primary" disabled={saving}>{saving ? '저장 중…' : '저장'}</button>
+    </form>
+  );
+}
+
 export function CalendarSettingsDialog({ cal, user, calendars, subscriptions, initialTab = 'info', onClose }) {
   const [tab, setTab] = useState(initialTab);
   if (!cal) {
     return <Modal title="캘린더" onClose={onClose} small><p>이 캘린더에 더 이상 접근할 수 없습니다.</p></Modal>;
   }
-  const tabs = [['info', '정보'], ['members', `멤버 ${cal.memberIds.length}`], ['invites', '초대'], ['subs', '구독']];
+  const tabs = [['info', '정보'], ['categories', '분류'], ['members', `멤버 ${cal.memberIds.length}`], ['invites', '초대'], ['subs', '구독']];
   return (
     <Modal title={cal.name} onClose={onClose} wide>
       <div className="tabs" role="tablist">
         {tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === 'info' && <InfoTab cal={cal} user={user} onClose={onClose} />}
+      {tab === 'categories' && <CategoriesTab cal={cal} user={user} onClose={onClose} />}
       {tab === 'members' && <MembersTab cal={cal} user={user} />}
       {tab === 'invites' && <InvitesTab cal={cal} user={user} />}
       {tab === 'subs' && <SubscriptionsTab cal={cal} user={user} calendars={calendars} subscriptions={subscriptions} />}

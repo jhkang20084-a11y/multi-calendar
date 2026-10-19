@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import { createCalendar, changeMemberRole, removeMember, transferOwnership, leaveCalendar, newCalendarDoc } from '../../src/services/calendars.js';
 import { inviteMember, acceptInvitation, declineInvitation, cancelInvitation } from '../../src/services/invitations.js';
-import { createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
+import { addTodos, createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
 import { subscribe, unsubscribe, subscriptionId } from '../../src/services/subscriptions.js';
 import { addTodo, toggleTodo } from '../../src/services/todos.js';
 import { ensureUserProfile } from '../../src/services/users.js';
@@ -426,5 +426,26 @@ describe('링크 초대', () => {
       role: 'viewer', calendarId: calId, calendarName: '커플', calendarColor: '#000', createdBy: 'alice', createdByName: 'A',
       createdAt: serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 90 * 86400e3),
     }));
+  });
+});
+
+describe('분류와 일정+할 일 함께 만들기', () => {
+  it('일정을 만들면서 할 일을 같은 배치로 등록 (편집자만)', async () => {
+    const calId = await sharedWithBob('viewer');
+    const a = dbOf('alice');
+    const id = await createEvent(a, users.alice, calId, eventInput(), ['장보기', '케이크 예약']);
+    const todos = await getDocs(collection(a, 'calendars', calId, 'events', id, 'todos'));
+    expect(todos.docs.map((d) => d.data().text).sort()).toEqual(['장보기', '케이크 예약']);
+    await assertFails(createEvent(dbOf('bob'), users.bob, calId, eventInput(), ['열람자 할 일']));
+    await assertFails(addTodos(dbOf('bob'), users.bob, calId, id, ['열람자 할 일']));
+    await assertSucceeds(addTodos(a, users.alice, calId, id, ['추가 할 일']));
+  });
+  it('분류 목록은 소유자만 바꿀 수 있음', async () => {
+    const calId = await sharedWithBob('editor');
+    const cats = [{ id: 'x', name: '데이트', color: '#e8a3a0' }];
+    await assertFails(updateDoc(doc(dbOf('bob'), 'calendars', calId), { categories: cats, updatedAt: serverTimestamp(), updatedBy: 'bob' }));
+    await assertSucceeds(updateDoc(doc(dbOf('alice'), 'calendars', calId), { categories: cats, updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+    const many = Array.from({ length: 21 }, (_, i) => ({ id: `c${i}`, name: `분류${i}`, color: '#000' }));
+    await assertFails(updateDoc(doc(dbOf('alice'), 'calendars', calId), { categories: many, updatedAt: serverTimestamp(), updatedBy: 'alice' }));
   });
 });

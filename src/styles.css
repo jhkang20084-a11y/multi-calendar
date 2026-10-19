@@ -45,6 +45,10 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* 앱처럼: 좌우 흔들림·튕김·두 번 탭 확대·길게 누르기 메뉴 방지 */
+html, body { overflow-x: hidden; overscroll-behavior: none; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+#root { overflow-x: hidden; }
+button, .cell, .chip, .tevent, .list-item, .ruled-item, .cal-item, .seg, .tabs { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 body {
   margin: 0; color: var(--ink); background: var(--paper) var(--grain);
   font: 15px/1.5 var(--font-body);
@@ -54,6 +58,7 @@ body.modal-open { overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
 input, select, textarea {
   background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-height: 44px; width: 100%;
+  font-size: 16px; /* 16px 미만이면 iPhone 이 입력할 때 화면을 확대한다 */
 }
 textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
@@ -181,9 +186,6 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 .chip-timed { border-left: 2.5px solid var(--c); border-radius: 0; padding-left: 4px; }
 .chip-title { overflow: hidden; text-overflow: ellipsis; }
 .chip-time { color: var(--muted); font-variant-numeric: tabular-nums; }
-.chip-sub { background: transparent; border: 1px dashed var(--c); border-radius: 3px; }
-.chip-sub.chip-timed { border-left: 1px dashed var(--c); }
-.chip-sub-icon { font-size: 9px; }
 .chip-done .chip-title, .chip-done .tevent-title, .chip-done .list-title { text-decoration: line-through; opacity: .55; }
 .chip-busy { background-image: repeating-linear-gradient(45deg, transparent 0 4px, var(--line-soft) 4px 8px); }
 
@@ -239,7 +241,7 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 .ruled-empty { font-family: var(--font-hand); font-size: 19px; color: var(--muted); padding-left: 4px; }
 .ruled-add { color: var(--muted); }
 .memo-area {
-  font-family: var(--font-hand); font-size: 20px; line-height: 46px; padding: 0 4px; min-height: 184px; border: 0; border-radius: 0;
+  font-family: var(--font-hand); font-size: 20px !important; line-height: 46px; padding: 0 4px; min-height: 184px; border: 0; border-radius: 0;
   background: transparent repeating-linear-gradient(to bottom, transparent 0 45px, var(--line) 45px 46px);
   background-attachment: local; resize: none;
 }
@@ -273,7 +275,6 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
   background: color-mix(in srgb, var(--c) 26%, var(--paper)); text-align: left; overflow: hidden; cursor: pointer; color: var(--ink);
   display: flex; flex-direction: column; font-size: 11px; z-index: 1;
 }
-.tevent.chip-sub { background: var(--paper); border: 1px dashed var(--c); border-left: 3px dashed var(--c); }
 .tevent-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tevent-time, .tevent-src { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -447,3 +448,25 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 .link-invite .hint { margin-top: 4px; }
 .join-card { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .join-card .join-name { font-family: var(--font-display); font-size: 30px; line-height: 1.1; }
+
+/* 월 이름 양옆 이동 버튼, 오른쪽 위 캘린더 설정(⋯) */
+.title-row { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.title-row .month-name { min-width: 0; overflow: hidden; text-overflow: clip; font-size: clamp(38px, 12.5vw, 96px); }
+.masthead.compact .title-row .month-name { font-size: clamp(30px, 9vw, 52px); }
+.nav-arrow { width: 40px; height: 40px; flex: none; color: var(--ink-soft); }
+.nav-arrow svg { width: 26px; height: 26px; }
+.masthead-more { position: absolute; right: -6px; top: 0; font-size: 22px; letter-spacing: 1px; }
+.cover-banner + .masthead .masthead-more { top: 0; }
+.controls { justify-content: space-between; }
+
+/* 분류 선택, 지도 링크, 할 일 미리 적기 */
+.category-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.category-pick button { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line); background: transparent; cursor: pointer; font-size: 14px; }
+.category-pick button.on { border-color: var(--ink); background: color-mix(in srgb, var(--c) 28%, transparent); }
+.map-link { color: var(--ink-soft); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; margin-top: -6px; }
+.todo-draft { list-style: none; margin: 0; padding: 0; }
+.todo-draft li { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); min-height: 42px; font-family: var(--font-hand); font-size: 19px; }
+.category-list { list-style: none; margin: 0; padding: 0; }
+.category-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 52px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.category-list li input { flex: 1; min-width: 120px; width: auto; }
+.category-colors { width: 100%; padding: 4px 0 8px 42px; }
