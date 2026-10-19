@@ -79,13 +79,21 @@ describe('layout', () => {
   });
 });
 
-import { holidayOf, specialDayOf } from '../../src/lib/holidays.js';
-describe('공휴일', () => {
-  it('레퍼런스 달력(2026년 10월)과 일치', () => {
+import { holidayOf, holidayFullName, specialDayOf } from '../../src/lib/holidays.js';
+describe('공휴일 (자동 데이터 사본)', () => {
+  it('레퍼런스 달력(2026년 10월)과 일치하고 짧은 이름으로 표시', () => {
     expect(holidayOf('2026-10-03')).toBe('개천절');
     expect(holidayOf('2026-10-05')).toBe('대체휴일');
     expect(holidayOf('2026-10-09')).toBe('한글날');
     expect(holidayOf('2026-10-10')).toBeNull();
+    expect(holidayOf('2026-12-25')).toBe('성탄절');
+    expect(holidayFullName('2026-10-05')).toBe('대체공휴일(개천절)');
     expect(specialDayOf('2026-10-31')).toBe('할로윈');
+  });
+  it('직접 만든 표에서 빠졌던 공휴일과 2027년 명절 포함', () => {
+    expect(holidayOf('2026-05-01')).toBe('노동절');
+    expect(holidayOf('2026-07-17')).toBe('제헌절');
+    expect(holidayOf('2027-02-07')).toBe('설날');
+    expect(holidayOf('2027-02-09')).toBe('대체휴일');
   });
 });

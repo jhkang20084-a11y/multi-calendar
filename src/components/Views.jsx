@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { holidayOf, specialDayOf } from '../lib/holidays.js';
+import { holidayOf, holidayFullName, specialDayOf } from '../lib/holidays.js';
 import { DateTime } from 'luxon';
 import { groupByDate, layoutOverlaps } from '../lib/feed.js';
 import { formatTime, safeZone, addDays } from '../lib/time.js';
@@ -84,7 +84,7 @@ export function MonthView({
                 role="gridcell" aria-selected={d === selectedDate} aria-label={`${d}${hol ? ` ${hol}` : ''} 일정 ${list.length}개`}>
                 <div className="cell-top">
                   <span className={`daynum ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''} ${hol ? 'holiday' : ''}`}>{Number(d.slice(8))}</span>
-                  {hol && <span className="holiday-name">{hol}</span>}
+                  {hol && <span className="holiday-name" title={holidayFullName(d)}>{hol}</span>}
                   {special && <span className="holiday-name special">{special}</span>}
                 </div>
                 <div className="cell-events">

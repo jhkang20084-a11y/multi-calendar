@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { loadHolidayYears, subscribeHolidays, holidaysVersion } from './lib/holidays.js';
 import { DateTime } from 'luxon';
 import { db, isConfigured, signInWithGoogle, usingEmulators, logout } from './firebase.js';
 import { useAuthState } from './hooks/useAuthState.js';
@@ -172,6 +173,11 @@ function Main({ user }) {
   const range = useMemo(() => (currentView === 'list'
     ? rangeForList(listFrom, listTo < listFrom ? listFrom : listTo, tz)
     : viewRange(currentView, anchor, tz, settings.weekStartsOn)), [currentView, anchor, tz, settings.weekStartsOn, listFrom, listTo]);
+
+  // 공휴일 자동 갱신: 보고 있는 해와 앞뒤 해를 받아 오고, 도착하면 다시 그린다.
+  useSyncExternalStore(subscribeHolidays, holidaysVersion);
+  const viewYear = Number((currentView === 'list' ? listFrom : anchor).slice(0, 4));
+  useEffect(() => { loadHolidayYears([viewYear - 1, viewYear, viewYear + 1]); }, [viewYear]);
 
   const calList = calendars || [];
   const calendarsById = useMemo(() => new Map(calList.map((c) => [c.id, c])), [calList]);

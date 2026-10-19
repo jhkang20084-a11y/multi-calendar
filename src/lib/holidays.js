@@ -1,53 +1,94 @@
-/**
- * 대한민국 공휴일 (달력 표시용). 음력 명절·선거일·대체공휴일은 계산하지 않고 표로 관리한다.
- * - 2025, 2026: 음력 명절·대체공휴일 포함
- * - 2027: 양력 공휴일과 그 대체공휴일만 포함 (설날·추석·부처님오신날은 확정 후 추가 필요)
- * 정부 발표(임시공휴일 등)에 따라 바뀔 수 있으니 매년 확인해 갱신한다.
- */
-const HOLIDAYS = {
-  // 2025
-  '2025-01-01': '신정',
-  '2025-01-27': '임시공휴일',
-  '2025-01-28': '설날 연휴', '2025-01-29': '설날', '2025-01-30': '설날 연휴',
-  '2025-03-01': '삼일절', '2025-03-03': '대체휴일',
-  '2025-05-05': '어린이날·부처님오신날', '2025-05-06': '대체휴일',
-  '2025-06-03': '대통령 선거일',
-  '2025-06-06': '현충일',
-  '2025-08-15': '광복절',
-  '2025-10-03': '개천절',
-  '2025-10-05': '추석 연휴', '2025-10-06': '추석', '2025-10-07': '추석 연휴', '2025-10-08': '대체휴일',
-  '2025-10-09': '한글날',
-  '2025-12-25': '성탄절',
-  // 2026
-  '2026-01-01': '신정',
-  '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴',
-  '2026-03-01': '삼일절', '2026-03-02': '대체휴일',
-  '2026-05-05': '어린이날',
-  '2026-05-24': '부처님오신날', '2026-05-25': '대체휴일',
-  '2026-06-03': '지방선거일',
-  '2026-06-06': '현충일',
-  '2026-08-15': '광복절', '2026-08-17': '대체휴일',
-  '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴',
-  '2026-10-03': '개천절', '2026-10-05': '대체휴일',
-  '2026-10-09': '한글날',
-  '2026-12-25': '성탄절',
-  // 2027 (양력 공휴일만)
-  '2027-01-01': '신정',
-  '2027-03-01': '삼일절',
-  '2027-05-05': '어린이날',
-  '2027-06-06': '현충일',
-  '2027-08-15': '광복절', '2027-08-16': '대체휴일',
-  '2027-10-03': '개천절', '2027-10-04': '대체휴일',
-  '2027-10-09': '한글날', '2027-10-11': '대체휴일',
-  '2027-12-25': '성탄절', '2027-12-27': '대체휴일',
-};
+import SNAPSHOT from './holidays-data.json';
 
-/** 'YYYY-MM-DD' → 공휴일 이름 또는 null */
-export function holidayOf(date) {
-  return HOLIDAYS[date] || null;
+/**
+ * 대한민국 공휴일을 자동으로 가져온다.
+ * - 출처: https://github.com/hyunbinseo/holidays-kr (관보 기준, 대체·임시공휴일·선거일 포함, 정부 발표 시 갱신)
+ * - 화면에 필요한 연도를 앱이 직접 내려받고(하루 동안 기기에 저장), 실패하면 앱에 들어 있는 사본을 쓴다.
+ * - 사본은 `npm run holidays:update` (배포할 때 자동 실행)로 최신화한다.
+ */
+const SOURCE = 'https://raw.githubusercontent.com/hyunbinseo/holidays-kr/main/public';
+const CACHE_KEY = 'holidays-kr:v1:';
+const TTL_MS = 24 * 3600e3;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const byYear = new Map(Object.entries(SNAPSHOT).map(([y, days]) => [Number(y), days]));
+const requested = new Set();
+const listeners = new Set();
+let version = 0;
+
+/** 외부 데이터는 형식을 검사한 뒤에만 쓴다. */
+function sanitize(year, json) {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
+  const out = {};
+  for (const [d, names] of Object.entries(json)) {
+    if (DATE.test(d) && d.startsWith(String(year)) && Array.isArray(names)) {
+      out[d] = names.filter((n) => typeof n === 'string').map((n) => n.slice(0, 40)).slice(0, 3);
+    }
+  }
+  return Object.keys(out).length ? out : null;
 }
 
-// 기념일 등 특별한 날 (공휴일 아님, 검정 글씨로 표시)
+function readCache(year) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CACHE_KEY + year));
+    return raw && Date.now() - raw.at < TTL_MS ? sanitize(year, raw.days) : null;
+  } catch { return null; }
+}
+
+function store(year, days) {
+  byYear.set(year, days);
+  version++;
+  listeners.forEach((l) => l());
+}
+
+/** 연도별 공휴일을 (아직 안 받았다면) 내려받는다. 실패해도 앱 사본으로 계속 동작한다. */
+export function loadHolidayYears(years) {
+  for (const year of years) {
+    if (requested.has(year)) continue;
+    requested.add(year);
+    const cached = typeof localStorage !== 'undefined' ? readCache(year) : null;
+    if (cached) { store(year, cached); continue; }
+    if (typeof fetch === 'undefined') continue;
+    fetch(`${SOURCE}/${year}.json`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        const days = sanitize(year, json);
+        if (!days) return;
+        try { localStorage.setItem(CACHE_KEY + year, JSON.stringify({ at: Date.now(), days })); } catch { /* 저장소 사용 불가 */ }
+        store(year, days);
+      })
+      .catch(() => { requested.delete(year); }); // 오프라인이면 다음에 다시 시도
+  }
+}
+
+export function subscribeHolidays(cb) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+export const holidaysVersion = () => version;
+
+/** 달력 칸에 들어갈 짧은 이름 */
+export function shortHolidayName(name) {
+  if (name.startsWith('대체공휴일')) return '대체휴일';
+  return ({
+    '1월 1일': '신정', '기독탄신일': '성탄절', '부처님 오신 날': '부처님오신날',
+    '전국동시지방선거': '지방선거', '설날 전날': '설날 연휴', '설날 다음 날': '설날 연휴',
+    '추석 전날': '추석 연휴', '추석 다음 날': '추석 연휴',
+  })[name] || name;
+}
+
+/** 'YYYY-MM-DD' → 공휴일 이름(짧게) 또는 null */
+export function holidayOf(date) {
+  const names = byYear.get(Number(date.slice(0, 4)))?.[date];
+  return names?.length ? names.map(shortHolidayName).join('·') : null;
+}
+
+/** 'YYYY-MM-DD' → 공휴일 정식 이름 또는 null */
+export function holidayFullName(date) {
+  return byYear.get(Number(date.slice(0, 4)))?.[date]?.join(', ') || null;
+}
+
+// 공휴일은 아니지만 달력에 적어 두면 좋은 날 (검정 글씨)
 const SPECIAL = { '10-31': '할로윈', '12-24': '크리스마스 이브', '02-14': '밸런타인데이', '03-14': '화이트데이' };
 
 export function specialDayOf(date) {
