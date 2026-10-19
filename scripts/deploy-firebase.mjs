@@ -1,5 +1,7 @@
 // Firebase 자동 배포 스크립트
-//   준비: 환경 변수 FIREBASE_SERVICE_ACCOUNT 에 서비스 계정 키(JSON 내용 전체)를 넣는다.
+//   준비(둘 중 하나):
+//     ① FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY 를 키 파일의 project_id, client_email, private_key 값으로
+//     ② FIREBASE_SERVICE_ACCOUNT 에 서비스 계정 키 JSON 전체(한 줄)
 //         (또는 로컬에서 `npx firebase login` 후 FIREBASE_PROJECT_ID 만 지정)
 //   실행: npm run deploy:auto
 // 하는 일: 웹 앱 등록/설정값 생성 → Firestore DB 확인(없으면 서울 리전에 생성) → Google 로그인 사용 여부 확인
@@ -16,9 +18,21 @@ const fail = (m) => { console.error(`\n✖ ${m}`); process.exit(1); };
 // ── 인증 ────────────────────────────────────────────────────────────────
 let projectId = process.env.FIREBASE_PROJECT_ID;
 const env = { ...process.env };
+let key = null;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  let key;
-  try { key = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT); } catch { fail('FIREBASE_SERVICE_ACCOUNT 가 올바른 JSON 이 아닙니다(키 파일 내용 전체를 넣어야 합니다).'); }
+  try { key = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT); } catch { fail('FIREBASE_SERVICE_ACCOUNT 가 올바른 JSON 이 아닙니다(키 파일 내용 전체를 한 줄로 넣어야 합니다).'); }
+} else if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+  // 키 파일에서 값 3개만 한 줄씩 넣은 경우: private_key 안의 \n 글자를 실제 줄바꿈으로 바꾼다.
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY.trim().replace(/^"|"$/g, '').replace(/\\n/g, '\n');
+  if (!privateKey.includes('BEGIN PRIVATE KEY')) fail('FIREBASE_PRIVATE_KEY 에는 키 파일의 private_key 값(-----BEGIN PRIVATE KEY----- 로 시작)을 넣어야 합니다.');
+  if (!projectId) fail('FIREBASE_PROJECT_ID 도 함께 넣어 주세요(키 파일의 project_id 값).');
+  key = {
+    type: 'service_account', project_id: projectId,
+    client_email: process.env.FIREBASE_CLIENT_EMAIL.trim().replace(/^"|"$/g, ''), private_key: privateKey,
+    token_uri: 'https://oauth2.googleapis.com/token',
+  };
+}
+if (key) {
   if (key.type !== 'service_account') fail('서비스 계정 키(JSON)가 아닙니다.');
   const dir = mkdtempSync(join(tmpdir(), 'fb-'));
   const keyPath = join(dir, 'key.json');

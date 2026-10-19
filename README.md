@@ -84,7 +84,7 @@ npm run dev     # http://localhost:5173
 ## 4. Firebase Hosting 배포
 
 ### 자동 배포 (권장): `npm run deploy:auto`
-환경 변수 `FIREBASE_SERVICE_ACCOUNT` 에 서비스 계정 키(JSON 내용 전체)를 넣고 실행하면
+환경 변수 `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`(키 파일의 project_id, client_email, private_key 값) 또는 `FIREBASE_SERVICE_ACCOUNT`(키 JSON 전체, 한 줄)를 넣고 실행하면
 웹 앱 등록 → 설정값(.env.production.local) 생성 → Firestore DB 확인/생성(서울) → Google 로그인 사용 여부 확인
 → 공휴일 사본 갱신 → 빌드 → 호스팅·보안 규칙·색인 배포까지 한 번에 합니다.
 (로컬 PC 에서는 `npx firebase login` 후 `FIREBASE_PROJECT_ID=<프로젝트ID> npm run deploy:auto` 도 됩니다.)
