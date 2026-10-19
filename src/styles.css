@@ -542,3 +542,21 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 }
 .done-check.on { background: var(--ink); }
 .done-check.placeholder { border-color: transparent; cursor: default; }
+
+/* 창(모달) 안에서 좌우로 밀리지 않게: 입력칸이 화면 폭을 넘지 않도록 */
+.modal, .modal-body { overflow-x: hidden; }
+.modal-body { touch-action: pan-y; overscroll-behavior: contain; }
+.modal input, .modal select, .modal textarea { max-width: 100%; min-width: 0; }
+/* iPhone Safari 의 날짜/시간 입력칸은 기본 모양이면 폭 지정을 무시하고 넓어진다 */
+.modal input[type="date"], .modal input[type="datetime-local"], .modal input[type="time"] {
+  -webkit-appearance: none; appearance: none; display: block; width: 100%; text-align: left;
+}
+.modal .row2 > * { min-width: 0; flex: 1 1 140px; }
+.modal .row-dt > * { flex: 1 1 100%; }
+.modal .inline { flex: 0 1 auto !important; flex-wrap: wrap; }
+.modal .inline input { width: 64px; }
+.modal .todo-add input, .modal .invite-form input, .modal .invite-form select { min-width: 0; flex: 1 1 120px; }
+
+/* 완료 동그라미는 일정 오른쪽 */
+.day-item .done-check { order: 2; margin-left: 4px; }
+.day-item .ruled-item { order: 1; }
