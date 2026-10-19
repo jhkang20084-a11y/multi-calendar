@@ -76,6 +76,7 @@ export function buildInstances({ eventsByCal, sources, calendarsById, range, uid
           color: ev.color || cal.color,
           calendarColor: cal.color,
           hiddenDetails: ev.visibility === 'busy' && !mine,
+          location: ev.visibility === 'busy' ? (secret?.location || '') : ev.location,
         };
         if (ev.allDay) {
           inst.startDate = o.startDate;

@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
-  getRedirectResult, signOut, setPersistence, browserLocalPersistence,
+  getRedirectResult, signOut, setPersistence, browserLocalPersistence, signInWithCredential,
 } from 'firebase/auth';
 import {
   initializeFirestore, connectFirestoreEmulator, persistentLocalCache,
@@ -37,6 +37,10 @@ export const db = app
 if (app && usingEmulators) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  // 에뮬레이터 전용: 자동화 테스트에서 팝업 없이 테스트 Google 계정으로 로그인 (배포 빌드에는 영향 없음)
+  window.__emuSignIn = (email, name) => signInWithCredential(auth, GoogleAuthProvider.credential(
+    JSON.stringify({ sub: email, email, email_verified: true, name }),
+  ));
 }
 
 if (auth) setPersistence(auth, browserLocalPersistence).catch(() => {});
