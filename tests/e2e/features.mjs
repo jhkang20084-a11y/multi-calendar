@@ -28,10 +28,34 @@ try {
   const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   if (overflow > 0) throw new Error(`가로로 ${overflow}px 넘침`);
 
-  step('월 이름 양옆에 이전/다음 버튼');
-  const row = p.locator('.title-row');
-  await row.getByRole('button', { name: '다음' }).waitFor();
-  await row.getByRole('button', { name: '이전' }).waitFor();
+  step('월 이동 버튼 없음, 손가락으로 끌어서 넘기기');
+  if (await p.getByRole('button', { name: '다음' }).count()) throw new Error('월 이동 버튼이 남아 있음');
+  const cdp = await ctx.newCDPSession(p);
+  async function swipe(fromX, toX, y = 420, steps = 8, ms = 16) {
+    const pt = (x) => [{ x, y, radiusX: 4, radiusY: 4, force: 1, id: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(fromX) });
+    for (let i = 1; i <= steps; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(fromX + ((toX - fromX) * i) / steps) });
+      await p.waitForTimeout(ms);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  const monthText = () => p.locator('.month-name').textContent();
+  const startMonth = await monthText();
+  await swipe(340, 300); // 조금만 밀면 제자리
+  await p.waitForTimeout(500);
+  if (await monthText() !== startMonth) throw new Error('조금 밀었는데 월이 넘어감');
+  if (await p.locator('.modal').count()) throw new Error('끌기 동작 뒤에 입력 창이 열림');
+  await swipe(350, 60, 420, 10, 16); // 왼쪽으로 크게 밀기 → 다음 달
+  await p.waitForTimeout(120);
+  await p.screenshot({ path: 'test-results/swipe-mid.png' });
+  await p.waitForTimeout(600);
+  const next = await monthText();
+  if (next === startMonth) throw new Error('밀었는데 월이 안 넘어감');
+  if (await p.locator('.modal').count()) throw new Error('넘기기 뒤에 입력 창이 열림');
+  await swipe(40, 330, 420, 10, 16); // 오른쪽으로 → 다시 이번 달
+  await p.waitForTimeout(800);
+  if (await monthText() !== startMonth) throw new Error(`되돌아오지 않음: ${await monthText()}`);
 
   step('날짜를 한 번 누르면 그 날짜로 일정 입력 창');
   await p.locator(`.cell[aria-label^="${today}"] .daynum`).click();

@@ -33,28 +33,6 @@ function Chip({ inst, tz, onOpen, compact, continued }) {
   );
 }
 
-/** 좌우로 밀어서 이전/다음으로 이동 */
-function useSwipe(onSwipe) {
-  const start = useRef(null);
-  return {
-    onTouchStart: (e) => {
-      if (e.touches.length !== 1) { start.current = null; return; }
-      const t = e.touches[0];
-      start.current = { x: t.clientX, y: t.clientY, at: Date.now() };
-    },
-    onTouchEnd: (e) => {
-      if (!start.current) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - start.current.x;
-      const dy = t.clientY - start.current.y;
-      const quick = Date.now() - start.current.at < 600;
-      start.current = null;
-      // 의도한 빠르고 확실한 좌우 밀기만 월 이동으로 처리 (살짝 스치는 것은 무시)
-      if (quick && Math.abs(dx) > 90 && Math.abs(dy) < 40 && Math.abs(dx) > Math.abs(dy) * 3) onSwipe(dx < 0 ? 1 : -1);
-    },
-  };
-}
-
 /** 화면 폭에 따라 한 칸에 보일 일정 줄 수 (휴대폰 좁은 화면 2줄, 그 외 3줄) */
 function useMaxLanes() {
   const get = () => (typeof window !== 'undefined' && window.innerWidth <= 420 ? 2 : 3);
@@ -87,11 +65,10 @@ function Bar({ bar, tz, onOpen }) {
 
 export function MonthView({
   range, anchorDate, instances, today, tz, weekStartsOn, selectedDate, sketch,
-  onOpen, onSelectDate, onCreateAt, onSwipe,
+  onOpen, onSelectDate, onCreateAt,
 }) {
   const days = datesBetween(range.startDate, range.endDate);
   const month = anchorDate.slice(0, 7);
-  const swipe = useSwipe(onSwipe);
   const maxLanes = useMaxLanes();
   // 마지막 주가 모두 다음 달이면 그리지 않는다(종이 달력처럼 5줄)
   const visible = days.slice(35).every((d) => d.slice(0, 7) !== month) ? days.slice(0, 35) : days;
@@ -106,7 +83,7 @@ export function MonthView({
   const byDate = useMemo(() => groupByDate(instances, visible[0], visible[visible.length - 1]), [instances, visible.join(',')]);
 
   return (
-    <div className={`month ${sketch ? 'sketch' : ''}`} style={{ '--lanes': maxLanes }} {...swipe}>
+    <div className={`month ${sketch ? 'sketch' : ''}`} style={{ '--lanes': maxLanes }}>
       <div className="month-head">
         {weekdayLabels(weekStartsOn).map((w, i) => {
           const dow = (i + weekStartsOn) % 7;
@@ -148,8 +125,7 @@ export function MonthView({
   );
 }
 
-export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt, onSwipe }) {
-  const swipe = useSwipe(onSwipe);
+export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt }) {
   const zone = safeZone(tz);
   const scroller = useRef(null);
   const [now, setNow] = useState(Date.now());
@@ -176,7 +152,7 @@ export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt, o
   });
 
   return (
-    <div className="tgrid" {...swipe}>
+    <div className="tgrid">
       <div className="tgrid-head" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
         <div />
         {days.map((d) => {

@@ -9,6 +9,7 @@ import { UiProvider, useUi, Spinner, ErrorBoundary, Torn, Hearts, SketchFilter }
 import { DayNotes, MonthMemo } from './components/Notes.jsx';
 import { coverStyle } from './lib/colors.js';
 import { MonthView, TimeGridView, ListView } from './components/Views.jsx';
+import { SwipePager } from './components/SwipePager.jsx';
 import { EventEditor } from './components/EventEditor.jsx';
 import { EventDetail } from './components/EventDetail.jsx';
 import { NewCalendarDialog, CalendarSettingsDialog, InvitationsDialog } from './components/CalendarDialogs.jsx';
@@ -396,9 +397,7 @@ function Main({ user }) {
 
           <div className={`masthead ${currentView === 'month' ? '' : 'compact'}`}>
             <div className="title-row">
-              <button className="icon-btn nav-arrow" onClick={() => move(-1)} aria-label="이전"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
               <h1 className="month-name">{monthName}</h1>
-              <button className="icon-btn nav-arrow" onClick={() => move(1)} aria-label="다음"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
             </div>
             <div className="masthead-sub"><span>{subtitle()}</span></div>
             {focusedCal && (
@@ -448,12 +447,13 @@ function Main({ user }) {
             </div>
           ) : currentView === 'month' ? (
             <>
-              <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
-                selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
-                onOpen={(inst) => setDialog({ type: 'detail', inst })}
-                onSelectDate={(d) => { setSelectedDate(d); openCreate(d); }}
-                onCreateAt={(d) => openCreate(d)}
-                onSwipe={move} />
+              <SwipePager onMove={move}>
+                <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
+                  selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
+                  onOpen={(inst) => setDialog({ type: 'detail', inst })}
+                  onSelectDate={(d) => { setSelectedDate(d); openCreate(d); }}
+                  onCreateAt={(d) => openCreate(d)} />
+              </SwipePager>
               <div className="notes-grid">
                 <DayNotes date={selectedDate} instances={instances} tz={tz}
                   onOpen={(inst) => setDialog({ type: 'detail', inst })} onCreate={(d) => openCreate(d)} />
@@ -461,14 +461,18 @@ function Main({ user }) {
               </div>
             </>
           ) : currentView === 'list' ? (
-            <ListView instances={instances} range={range} today={today} tz={tz} emptyText={emptyText}
-              onOpen={(inst) => setDialog({ type: 'detail', inst })} />
+            <SwipePager onMove={move}>
+              <ListView instances={instances} range={range} today={today} tz={tz} emptyText={emptyText}
+                onOpen={(inst) => setDialog({ type: 'detail', inst })} />
+            </SwipePager>
           ) : (
-            <TimeGridView
-              days={Array.from({ length: currentView === 'week' ? 7 : 1 }, (_, i) => addDays(range.startDate, i))}
-              instances={instances} today={today} tz={tz}
-              onOpen={(inst) => setDialog({ type: 'detail', inst })}
-              onCreateAt={(d, h) => openCreate(d, h)} onSwipe={move} />
+            <SwipePager onMove={move}>
+              <TimeGridView
+                days={Array.from({ length: currentView === 'week' ? 7 : 1 }, (_, i) => addDays(range.startDate, i))}
+                instances={instances} today={today} tz={tz}
+                onOpen={(inst) => setDialog({ type: 'detail', inst })}
+                onCreateAt={(d, h) => openCreate(d, h)} />
+            </SwipePager>
           )}
         </div>
 
