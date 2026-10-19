@@ -132,5 +132,6 @@ for (let attempt = 1; ; attempt++) {
   }
 }
 
-console.log(`\n✅ 배포 완료: https://${projectId}.web.app`);
+console.log(`\n✅ 배포 완료: https://${projectId}.firebaseapp.com`);
+  console.log('   (휴대폰 홈 화면에는 위 주소로 들어가서 추가하세요. .web.app 주소는 자동으로 이 주소로 이동합니다.)');
 console.log('   (Firestore 색인은 몇 분 뒤에 준비됩니다. 그 전에는 일정 목록이 잠시 비어 보일 수 있습니다.)');

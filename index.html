@@ -14,6 +14,14 @@
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-180.png" />
     <title>함께 캘린더</title>
+    <script>
+      // Google 로그인이 미리 허용된 주소(*.firebaseapp.com)에서 앱을 쓰도록 *.web.app 으로 들어오면 옮긴다.
+      // (앱 주소 = 로그인 처리 주소가 되어 iPhone Safari·홈 화면 앱에서도 로그인이 막히지 않는다)
+      if (/\.web\.app$/.test(location.hostname)) {
+        location.replace('https://' + location.hostname.replace(/\.web\.app$/, '.firebaseapp.com')
+          + location.pathname + location.search + location.hash);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
