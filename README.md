@@ -56,7 +56,10 @@ cp .env.example .env.local
 2. Authentication → **설정** → **승인된 도메인**에 사용할 도메인이 있는지 확인
    - 기본 포함: `localhost`, `<프로젝트ID>.web.app`, `<프로젝트ID>.firebaseapp.com`
    - 직접 산 도메인을 쓰면 추가
-3. **iPhone Safari / 홈 화면 앱 로그인 안정화(권장)**: `.env.local` 의
+3. **iPhone 로그인(필수)**: 앱은 호스팅 주소(`<프로젝트ID>.web.app`)에서 열릴 때 로그인도 같은 주소의 `/__/auth/` 로 처리합니다.
+   Google Cloud 콘솔 > API 및 서비스 > 사용자 인증 정보 > OAuth 2.0 클라이언트 ID 의 "Web client (auto created by Google Service)"
+   > **승인된 리디렉션 URI** 에 `https://<프로젝트ID>.web.app/__/auth/handler` 를 추가하세요(없으면 redirect_uri_mismatch 오류).
+4. (참고, 이전 방식) **iPhone Safari / 홈 화면 앱 로그인 안정화**: `.env.local` 의
    `VITE_FIREBASE_AUTH_DOMAIN` 을 `<프로젝트ID>.firebaseapp.com` 대신 **실제 접속 도메인**(예: `<프로젝트ID>.web.app`)으로 설정하세요.
    Safari 의 쿠키 차단 때문에 로그인 도메인이 앱 도메인과 다르면 리디렉션 로그인이 실패할 수 있습니다.
    Firebase Hosting 은 `/__/auth/handler` 를 자동 제공하므로 별도 작업이 필요 없습니다.

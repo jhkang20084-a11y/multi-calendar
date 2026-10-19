@@ -10,9 +10,18 @@ import {
 
 const env = import.meta.env;
 
+// iPhone Safari(추적 방지)는 앱 주소와 로그인 처리 주소가 다르면 로그인 정보를 막는다.
+// Firebase Hosting 은 모든 호스팅 주소에서 /__/auth/ 로그인 처리 페이지를 제공하므로,
+// 앱이 호스팅 주소(.web.app / .firebaseapp.com)에서 열리면 로그인도 같은 주소에서 처리한다.
+function pickAuthDomain() {
+  if (typeof window === 'undefined' || env.VITE_USE_EMULATORS === 'true') return env.VITE_FIREBASE_AUTH_DOMAIN;
+  const host = window.location.host;
+  return /\.(web\.app|firebaseapp\.com)$/.test(window.location.hostname) ? host : env.VITE_FIREBASE_AUTH_DOMAIN;
+}
+
 export const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+  authDomain: pickAuthDomain(),
   projectId: env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -48,11 +57,13 @@ if (auth) setPersistence(auth, browserLocalPersistence).catch(() => {});
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
 
-/** 홈 화면에 추가한 PWA(standalone)에서는 팝업이 막히므로 리디렉션 방식을 사용한다. */
+/** 홈 화면에 추가한 앱(standalone)과 iPhone/iPad 에서는 팝업 대신 리디렉션 방식을 쓴다. */
 function shouldUseRedirect() {
   const standalone = window.matchMedia?.('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
-  return standalone;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS
+  return standalone || (ios && !usingEmulators);
 }
 
 export async function signInWithGoogle() {

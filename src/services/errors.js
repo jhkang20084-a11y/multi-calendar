@@ -12,6 +12,12 @@ export function friendlyError(e) {
     'auth/popup-closed-by-user': '로그인 창이 닫혔습니다.',
     'auth/network-request-failed': '네트워크 오류로 로그인하지 못했습니다.',
     'auth/unauthorized-domain': '이 도메인은 Firebase 인증에 등록되지 않았습니다(승인된 도메인 설정 필요).',
+    'auth/operation-not-allowed': 'Google 로그인이 꺼져 있습니다. Firebase 콘솔 > Authentication > 로그인 방법에서 Google 을 사용 설정하세요.',
+    'auth/web-storage-unsupported': '브라우저가 로그인 정보를 저장할 수 없습니다. 개인정보 보호 브라우징(시크릿 모드)을 끄고 다시 시도하세요.',
+    'auth/internal-error': '로그인 중 오류가 났습니다. 잠시 후 다시 시도하세요.',
+    'auth/cancelled-popup-request': '로그인 창이 이미 열려 있습니다.',
+    'auth/redirect-cancelled-by-user': '로그인이 취소되었습니다.',
+    'auth/too-many-requests': '시도가 너무 많습니다. 잠시 후 다시 시도하세요.',
     'app/already-member': '이미 이 캘린더의 멤버입니다.',
     'app/already-invited': '이미 같은 역할로 초대 중인 사용자입니다.',
     'app/self-invite': '자기 자신은 초대할 수 없습니다.',
@@ -22,7 +28,9 @@ export function friendlyError(e) {
     'app/no-access': '해당 캘린더에 접근 권한이 없습니다.',
     'app/has-members': '다른 멤버가 있는 캘린더는 개인 캘린더로 바꿀 수 없습니다.',
   };
-  return map[code] || e?.message || '알 수 없는 오류가 발생했습니다.';
+  const text = map[code] || e?.message || '알 수 없는 오류가 발생했습니다.';
+  // 로그인 오류는 원인을 찾기 쉽게 코드도 함께 보여 준다.
+  return code.startsWith('auth/') ? `${text} (${code})` : text;
 }
 
 export function appError(code, message) {
