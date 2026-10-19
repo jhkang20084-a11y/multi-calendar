@@ -42,7 +42,8 @@ service cloud.firestore {
 
     function isMemberOf(cal) { return signedIn() && me() in cal.memberIds; }
     function isOwnerOf(cal) { return signedIn() && cal.ownerId == me(); }
-    function canEditIn(cal) { return signedIn() && (cal.ownerId == me() || me() in cal.editorIds); }
+    // 외부 캘린더(아이폰 등에서 가져온 일정)는 서버만 쓰고, 앱에서는 아무도 고칠 수 없다.
+    function canEditIn(cal) { return signedIn() && !('external' in cal) && (cal.ownerId == me() || me() in cal.editorIds); }
 
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function stamped() {
@@ -101,7 +102,7 @@ service cloud.firestore {
 
       function validCalendarFields(d) {
         return d.keys().hasOnly(['name', 'description', 'color', 'coverImage', 'shared', 'categories',
-                                 'ownerId', 'createdBy', 'editorIds', 'viewerIds', 'memberIds',
+                                 'external', 'syncRequestedAt', 'ownerId', 'createdBy', 'editorIds', 'viewerIds', 'memberIds',
                                  'memberInfo', 'createdAt', 'updatedAt', 'updatedBy'])
           && isStr(d.name, 60) && d.name.size() > 0
           && isStr(d.description, 500)
@@ -109,14 +110,17 @@ service cloud.firestore {
           && isStr(d.coverImage, 400000)
           && d.shared is bool
           // 분류 목록 [{id, name, color}] (최대 20개)
-          && (!('categories' in d) || (d.categories is list && d.categories.size() <= 20));
+          && (!('categories' in d) || (d.categories is list && d.categories.size() <= 20))
+          // 외부 캘린더는 나만 보는 캘린더로만 (공개 링크가 다른 사람에게 보이지 않도록)
+          && (!('external' in d) || (d.external is map && d.shared == false));
       }
 
       // 1) 소유자의 캘린더 설정 변경
       function ownerSettingsUpdate() {
         return isOwnerOf(resource.data)
           && changed().hasOnly(['name', 'description', 'color', 'coverImage', 'shared', 'categories',
-                                'updatedAt', 'updatedBy']);
+                                'syncRequestedAt', 'updatedAt', 'updatedBy'])
+          && (!('syncRequestedAt' in changed()) || request.resource.data.syncRequestedAt == request.time);
       }
 
       // 2) 소유자의 역할 변경/멤버 제거 (새 멤버 추가 불가, 정보 위조 불가)
@@ -220,7 +224,12 @@ service cloud.firestore {
         && request.resource.data.createdBy == me()
         && request.resource.data.memberIds == [me()]
         && request.resource.data.createdAt == request.time
-        && stamped();
+        && stamped()
+        // 외부 캘린더를 만들 때 앱은 링크만 넣는다(동기화 상태는 서버가 기록)
+        && (!('external' in request.resource.data)
+            || (request.resource.data.external.keys().hasOnly(['url'])
+                && isStr(request.resource.data.external.url, 2000)
+                && request.resource.data.external.url.matches('^(https|webcal)://[^\\s]+$')));
 
       allow update: if signedIn()
         && validCalendarFields(request.resource.data)

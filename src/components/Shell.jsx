@@ -73,7 +73,7 @@ export function Sidebar({
                 <button className="cal-name-btn" onClick={() => { setFocus(c.id); onCloseMobile(); }}>
                   <span className="cal-name">{c.shared ? '' : '🔒 '}{c.name}</span>
                   <span className="muted small">
-                    {ROLE_LABELS[role]}{c.shared ? ` · ${c.memberIds.length}명` : ''}{subsCountByTarget.get(c.id) ? ` · 🔗${subsCountByTarget.get(c.id)}` : ''}
+                    {c.external ? '외부 캘린더 · 읽기 전용' : ROLE_LABELS[role]}{c.shared ? ` · ${c.memberIds.length}명` : ''}{subsCountByTarget.get(c.id) ? ` · 🔗${subsCountByTarget.get(c.id)}` : ''}
                     {st?.state === 'error' ? ' · ⚠ 오류' : ''}{overflowIds.includes(c.id) ? ' · 표시 한도 초과' : ''}
                   </span>
                 </button>

@@ -6,7 +6,7 @@ import {
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, serverTimestamp,
   writeBatch, arrayUnion, collectionGroup,
 } from 'firebase/firestore';
-import { createCalendar, changeMemberRole, removeMember, transferOwnership, leaveCalendar, newCalendarDoc } from '../../src/services/calendars.js';
+import { createExternalCalendar, requestExternalSync, createCalendar, changeMemberRole, removeMember, transferOwnership, leaveCalendar, newCalendarDoc } from '../../src/services/calendars.js';
 import { inviteMember, acceptInvitation, declineInvitation, cancelInvitation } from '../../src/services/invitations.js';
 import { setOccurrenceCompleted, addTodos, createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
 import { subscribe, unsubscribe, subscriptionId, setSubscriptionColor } from '../../src/services/subscriptions.js';
@@ -474,5 +474,44 @@ describe('그날 목록에서 완료 체크', () => {
     const sid = await createEvent(a, users.alice, calId, eventInput());
     await assertSucceeds(setOccurrenceCompleted(a, users.alice, calId, sid, null, true));
     await assertFails(setOccurrenceCompleted(dbOf('bob'), users.bob, calId, sid, null, false));
+  });
+});
+
+describe('외부 캘린더(아이폰 링크)', () => {
+  const URL_ = 'webcal://p01-caldav.icloud.com/published/2/abcdef';
+  it('링크만 넣어 만들 수 있고, 동기화 상태 위조·공유·잘못된 링크는 거부', async () => {
+    const a = dbOf('alice');
+    const id = await createExternalCalendar(a, users.alice, { name: '아이폰', url: URL_, color: '#e6a157' });
+    expect((await getCal(a, id)).external).toEqual({ url: URL_ });
+    const base = { ...newCalendarDoc(users.alice, { name: 'x' }), categories: [] };
+    await assertFails(setDoc(doc(a, 'calendars', 'e1'), { ...base, external: { url: URL_, status: 'ok', eventCount: 999 } }));
+    await assertFails(setDoc(doc(a, 'calendars', 'e2'), { ...base, shared: true, external: { url: URL_ } }));
+    await assertFails(setDoc(doc(a, 'calendars', 'e3'), { ...base, external: { url: 'javascript:alert(1)' } }));
+    // 만든 뒤 링크/상태 바꾸기, 공유로 바꾸기 불가
+    await assertFails(updateDoc(doc(a, 'calendars', id), { 'external.url': 'https://evil.example/x.ics', updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+    await assertFails(updateDoc(doc(a, 'calendars', id), { shared: true, updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+    // 지금 가져오기 요청과 이름·색 변경은 가능
+    await assertSucceeds(requestExternalSync(a, users.alice, id));
+    await assertSucceeds(updateDoc(doc(a, 'calendars', id), { name: '아이폰 개인', color: '#5f9e8f', updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+  });
+
+  it('서버가 가져온 일정은 볼 수만 있고 소유자도 추가·수정·삭제 불가', async () => {
+    const a = dbOf('alice');
+    const id = await createExternalCalendar(a, users.alice, { name: '아이폰', url: URL_, color: '#e6a157' });
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'calendars', id, 'events', 'x1'), {
+        calendarId: id, title: '아이폰 일정', description: '', location: '', notes: '', color: '', category: '', allDay: true,
+        startMs: null, endMs: null, startDate: '2026-10-20', endDate: '2026-10-20', timeZone: 'Asia/Seoul',
+        rangeStartMs: Date.parse('2026-10-19T10:00:00Z'), rangeEndMs: Date.parse('2026-10-21T14:00:00Z'),
+        recurrence: null, exdates: [], recurringEventId: null, originalStart: null, visibility: 'members', kind: 'event',
+        completed: false, reminders: [], showDday: false, createdBy: 'external', updatedBy: 'external', fp: 'z',
+      });
+    });
+    const seen = await listenOnce(a, 'alice', id);
+    expect(seen.map((e) => e.title)).toEqual(['아이폰 일정']);
+    await assertFails(createEvent(a, users.alice, id, eventInput()));
+    await assertFails(updateDoc(doc(a, 'calendars', id, 'events', 'x1'), { title: '고침', updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+    await assertFails(deleteDoc(doc(a, 'calendars', id, 'events', 'x1')));
+    await assertFails(getDoc(doc(dbOf('bob'), 'calendars', id)));
   });
 });

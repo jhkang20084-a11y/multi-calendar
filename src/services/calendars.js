@@ -1,6 +1,6 @@
 import {
   collection, doc, query, where, onSnapshot, serverTimestamp, updateDoc, runTransaction,
-  setDoc, deleteField, getDocs, writeBatch, deleteDoc,
+  setDoc, deleteField, getDocs, writeBatch, deleteDoc, getDoc,
 } from 'firebase/firestore';
 import { appError } from './errors.js';
 import { DEFAULT_CATEGORIES, cleanCategories } from '../lib/categories.js';
@@ -15,7 +15,9 @@ export function roleOf(cal, uid) {
   return null;
 }
 
-export const canEdit = (cal, uid) => ['owner', 'editor'].includes(roleOf(cal, uid));
+// 외부 캘린더(아이폰 등에서 가져온 일정)는 아무도 앱에서 고칠 수 없다(서버가 동기화).
+export const canEdit = (cal, uid) => !cal?.external && ['owner', 'editor'].includes(roleOf(cal, uid));
+export const isExternal = (cal) => Boolean(cal?.external);
 export const isOwner = (cal, uid) => roleOf(cal, uid) === 'owner';
 
 export function memberInfoFromUser(user) {
@@ -154,6 +156,9 @@ export function transferOwnership(db, user, calId, newOwnerUid) {
  */
 export async function deleteCalendar(db, user, calId) {
   const calRef = doc(db, 'calendars', calId);
+  // 외부 캘린더의 일정은 서버가 쓴 것이라 앱에서 지울 수 없다 → 캘린더만 지우면 서버가 정리한다.
+  const calSnap = await getDoc(calRef);
+  if (calSnap.exists() && calSnap.data().external) { await deleteDoc(calRef); return; }
   const evSnap = await getDocs(query(collection(calRef, 'events'), where('visibility', 'in', ['members', 'busy'])));
   const mine = await getDocs(query(collection(calRef, 'events'), where('createdBy', '==', user.uid), where('visibility', '==', 'private')));
   const refs = [];
@@ -175,4 +180,27 @@ export async function deleteCalendar(db, user, calId) {
     await b.commit();
   }
   await deleteDoc(calRef);
+}
+
+/**
+ * 외부 캘린더 추가: 아이폰(iCloud) "공개 캘린더" 링크 등 ICS 주소를 넣으면 서버가 일정을 가져온다.
+ * 나만 보는 캘린더로 만들고, target 캘린더에서 구독해 함께 보이게 한다.
+ */
+export async function createExternalCalendar(db, user, { name, url, color }) {
+  const clean = String(url || '').trim();
+  if (!/^(https|webcal):\/\/\S+$/i.test(clean)) throw appError('app/invalid-feed');
+  const ref = doc(collection(db, 'calendars'));
+  await setDoc(ref, {
+    ...newCalendarDoc(user, { name: name?.trim() || '아이폰 캘린더', color, shared: false }),
+    categories: [],
+    external: { url: clean },
+  });
+  return ref.id;
+}
+
+/** 외부 캘린더 "지금 새로 가져오기" (서버가 syncRequestedAt 변경을 보고 다시 가져옴) */
+export function requestExternalSync(db, user, calId) {
+  return updateDoc(doc(db, 'calendars', calId), {
+    syncRequestedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: user.uid,
+  });
 }

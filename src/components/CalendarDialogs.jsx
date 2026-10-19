@@ -4,7 +4,7 @@ import { db } from '../firebase.js';
 import { PALETTE, COVER_PRESETS, coverStyle, resizeImage } from '../lib/colors.js';
 import {
   createCalendar, updateCalendarSettings, changeMemberRole, removeMember, leaveCalendar,
-  transferOwnership, deleteCalendar, roleOf, ROLE_LABELS,
+  transferOwnership, deleteCalendar, roleOf, ROLE_LABELS, createExternalCalendar, requestExternalSync,
 } from '../services/calendars.js';
 import {
   inviteMember, cancelInvitation, deleteInvitation, listenCalendarInvitations, INVITE_STATUS_LABELS,
@@ -112,6 +112,13 @@ function InfoTab({ cal, user, onClose }) {
       <label className="field"><span>설명</span><input maxLength={500} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></label>
       <div className="field"><span>대표 색상</span><ColorPicker value={f.color} onChange={(c) => setF({ ...f, color: c })} palette={PALETTE} />
         <small>다른 캘린더에서 이 캘린더를 구독하면, 이 캘린더 일정은 분류와 상관없이 이 색으로 보입니다.</small></div>
+      {cal.external ? (
+        <div className="field">
+          <span>외부 캘린더</span>
+          <p className="hint">아이폰 등에서 가져오는 읽기 전용 캘린더예요. {externalStatus(cal)}</p>
+          <button type="button" className="btn btn-small" onClick={() => write(requestExternalSync(db, user, cal.id), '새로 가져오는 중이에요.')}>지금 가져오기</button>
+        </div>
+      ) : (
       <div className="field">
         <span>종류</span>
         <div className="seg">
@@ -120,6 +127,7 @@ function InfoTab({ cal, user, onClose }) {
         </div>
         {!f.shared && cal.memberIds.length > 1 && <small className="form-error">다른 멤버가 있어 개인 캘린더로 바꿀 수 없습니다.</small>}
       </div>
+      )}
       <CoverPicker value={f.coverImage} color={f.color} onChange={(v) => setF({ ...f, coverImage: v })} />
       <div className="btn-row">
         <button className="btn btn-primary" disabled={saving}>{saving ? '저장 중…' : '저장'}</button>
@@ -283,6 +291,66 @@ function InvitesTab({ cal, user }) {
   );
 }
 
+/** 외부 캘린더 동기화 상태 문구 */
+export function externalStatus(cal) {
+  const x = cal?.external;
+  if (!x) return '';
+  if (x.status === 'error') return `가져오기 실패: ${x.error || '알 수 없는 오류'}`;
+  if (!x.status && Date.now() - (cal.createdAt?.toMillis?.() || Date.now()) > 3 * 60e3) {
+    return '서버가 아직 가져오지 않았어요(서버 함수 배포·Blaze 요금제를 확인하세요).';
+  }
+  if (x.status === 'syncing' || !x.lastSyncAt) return '가져오는 중…';
+  const t = x.lastSyncAt.toDate?.();
+  return `일정 ${x.eventCount ?? 0}개 · ${t ? t.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''} 가져옴`;
+}
+
+/** 아이폰(iCloud) 등 외부 캘린더 링크를 붙여 넣어 이 캘린더에서 함께 보기 */
+function ExternalFeedForm({ cal, user, calendars }) {
+  const { write } = useUi();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('아이폰 캘린더');
+  const [url, setUrl] = useState('');
+  const [color, setColor] = useState(PALETTE[3]);
+  const [busy, setBusy] = useState(false);
+  if (!open) {
+    return <button type="button" className="btn btn-small" onClick={() => setOpen(true)}>＋ 아이폰(iCloud) 캘린더 링크로 가져오기</button>;
+  }
+  return (
+    <form className="form external-form" onSubmit={async (e) => {
+      e.preventDefault();
+      setBusy(true);
+      const op = (async () => {
+        const extId = await createExternalCalendar(db, user, { name, url, color });
+        await subscribe(db, user, cal.id, extId, [...calendars, { id: extId, color }], color);
+      })();
+      const r = await write(op, `"${name}"을(를) 추가했어요. 일정을 가져오는 중이에요.`);
+      setBusy(false);
+      if (r !== 'error') { setOpen(false); setUrl(''); }
+    }}>
+      <details className="howto" open>
+        <summary>아이폰에서 링크 복사하는 방법</summary>
+        <ol>
+          <li>아이폰 <b>캘린더</b> 앱 → 아래쪽 <b>캘린더</b> 누르기</li>
+          <li>가져올 캘린더 오른쪽 <b>ⓘ</b> 누르기 (iCloud 캘린더만 가능)</li>
+          <li><b>공개 캘린더</b> 켜기 → <b>링크 공유…</b> → <b>복사</b></li>
+          <li>아래 칸에 붙여 넣기</li>
+        </ol>
+        <small>공개 캘린더 링크는 아는 사람 누구나 볼 수 있으니 다른 곳에 올리지 마세요. Google 캘린더의 "iCal 형식 비밀 주소"도 넣을 수 있어요.</small>
+      </details>
+      <label className="field"><span>이름</span><input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} /></label>
+      <label className="field"><span>링크</span>
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="webcal://p00-caldav.icloud.com/published/…" inputMode="url" autoCapitalize="off" autoCorrect="off" required />
+      </label>
+      <div className="field"><span>색</span><ColorPicker value={color} onChange={setColor} palette={PALETTE} /></div>
+      <div className="btn-row">
+        <button type="button" className="btn" onClick={() => setOpen(false)}>취소</button>
+        <button className="btn btn-primary" disabled={busy || !url.trim()}>{busy ? '추가하는 중…' : '가져오기'}</button>
+      </div>
+      <small className="muted">추가하면 바로 한 번 가져오고, 그 뒤로 30분마다 새로 가져와요. 가져온 일정은 읽기 전용이고, 수정은 아이폰에서 해 주세요.</small>
+    </form>
+  );
+}
+
 function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
   const { write } = useUi();
   const mine = subscriptions.filter((s) => s.targetCalendarId === cal.id);
@@ -314,6 +382,7 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
         )}
       </form>
       {options.length === 0 && <p className="muted small">구독할 수 있는 다른 캘린더가 없습니다.</p>}
+      <div style={{ margin: '14px 0 4px' }}><ExternalFeedForm cal={cal} user={user} calendars={calendars} /></div>
       <ul className="invite-list">
         {mine.map((s) => {
           const st = subscriptionStatus(s, calendars);
@@ -323,8 +392,12 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
               <button type="button" className="swatch" style={{ background: s.color || src?.color || '#999' }}
                 aria-label={`${src?.name || ''} 구독 색 바꾸기`} onClick={() => setEditingColor(editingColor === s.id ? null : s.id)} />
               <span className="member-main"><b>{src?.name || '(접근할 수 없는 캘린더)'}</b>
-                <span className="muted small">{st === 'no-access' ? '원본 접근 권한이 없어 표시가 중단되었습니다' : st === 'paused' ? '일시 중지됨' : `내 역할: ${ROLE_LABELS[roleOf(src, user.uid)]}`}</span>
+                <span className="muted small">{st === 'no-access' ? '원본 접근 권한이 없어 표시가 중단되었습니다' : st === 'paused' ? '일시 중지됨'
+                  : src?.external ? `외부 캘린더 · ${externalStatus(src)}` : `내 역할: ${ROLE_LABELS[roleOf(src, user.uid)]}`}</span>
               </span>
+              {src?.external && (
+                <button className="btn btn-small" onClick={() => write(requestExternalSync(db, user, src.id), '새로 가져오는 중이에요.')}>지금 가져오기</button>
+              )}
               {st !== 'no-access' && (
                 <button className="btn btn-small" onClick={() => write(setSubscriptionActive(db, s.id, !s.active), s.active ? '구독을 일시 중지했습니다.' : '구독을 다시 표시합니다.')}>
                   {s.active ? '일시 중지' : '다시 표시'}

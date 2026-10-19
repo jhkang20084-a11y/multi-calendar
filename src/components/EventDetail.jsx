@@ -201,7 +201,9 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
             {inst.subscribed && viaCalendar && <span className="muted"> · {viaCalendar.name}에서 함께 보는 중</span>}
           </span>
         </div>
-        {!editable && <p className="muted small">내 역할: {ROLE_LABELS[role] || '없음'} — 이 일정은 볼 수만 있어요.</p>}
+        {calendar?.external
+          ? <p className="hint">외부 캘린더(아이폰 등)에서 가져온 일정이에요. 수정은 원래 캘린더에서 해 주세요. 30분마다 새로 가져와요.</p>
+          : !editable && <p className="muted small">내 역할: {ROLE_LABELS[role] || '없음'} — 이 일정은 볼 수만 있어요.</p>}
 
         {canSeeDetails ? (
           <>
@@ -216,7 +218,7 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
           <p className="hint">작성자가 "시간만 공개"로 설정한 일정이라 세부 내용을 볼 수 없습니다.</p>
         )}
 
-        <p className="muted small">공개 범위: {VISIBILITY_LABELS[ev.visibility]}{ev.reminders?.length ? ` · 알림 ${ev.reminders[0] === 0 ? '시작 시' : `${ev.reminders[0]}분 전`}` : ''}</p>
+        {!calendar?.external && <p className="muted small">공개 범위: {VISIBILITY_LABELS[ev.visibility]}{ev.reminders?.length ? ` · 알림 ${ev.reminders[0] === 0 ? '시작 시' : `${ev.reminders[0]}분 전`}` : ''}</p>}
 
         {editable && (
           <label className="check">
@@ -226,15 +228,15 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
         )}
         {!editable && inst.done && <p>✅ 완료됨</p>}
 
-        {canSeeDetails && (
+        {canSeeDetails && !calendar?.external && (
           <TodoList user={user} calId={inst.calendarId} eventId={inst.eventId} members={members} editable={editable} />
         )}
         {ev.recurrence && canSeeDetails && <p className="muted small">체크리스트와 메모는 반복 일정 전체에 공통으로 연결됩니다.</p>}
 
-        <div className="meta">
+        {!calendar?.external && <div className="meta">
           <span><Avatar name={members[ev.createdBy]?.name} photoURL={members[ev.createdBy]?.photoURL} size={20} /> 작성: {members[ev.createdBy]?.name || '이전 멤버'}</span>
           {ev.updatedBy && <span>수정: {members[ev.updatedBy]?.name || '이전 멤버'}{ev.updatedAt?.toDate ? ` · ${ev.updatedAt.toDate().toLocaleString('ko-KR')}` : ''}</span>}
-        </div>
+        </div>}
       </div>
     </Modal>
   );

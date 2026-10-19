@@ -5,7 +5,7 @@
 //         (또는 로컬에서 `npx firebase login` 후 FIREBASE_PROJECT_ID 만 지정)
 //   실행: npm run deploy:auto
 // 하는 일: 웹 앱 등록/설정값 생성 → Firestore DB 확인(없으면 서울 리전에 생성) → Google 로그인 사용 여부 확인
-//          → 공휴일 사본 갱신 → 빌드 → hosting + firestore 규칙 + 색인 배포
+//          → 공휴일 사본 갱신 → 빌드 → hosting + firestore 규칙 + 색인 배포 → 서버 함수 배포(Blaze 요금제일 때)
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -132,6 +132,24 @@ for (let attempt = 1; ; attempt++) {
   }
 }
 
+// ── 외부 캘린더(아이폰 링크)용 서버 함수 ──────────────────────────────────
+// Cloud Functions 는 Blaze(사용량 기반) 요금제에서만 배포된다. 실패해도 앱 자체는 위에서 이미 배포됐다.
+log('서버 함수 배포 (외부 캘린더 가져오기)');
+let functionsOk = false;
+try {
+  execFileSync('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: join(root, 'functions'), env, stdio: 'inherit' });
+  fb(['deploy', '--only', 'functions', '--force'], { inherit: true });
+  functionsOk = true;
+} catch {
+  console.warn([
+    '',
+    '⚠ 서버 함수는 배포하지 못했습니다. 앱은 정상 동작하지만 "아이폰 캘린더 가져오기"만 동작하지 않습니다.',
+    '  대부분 요금제 때문입니다. Firebase 콘솔 왼쪽 아래 "업그레이드" → Blaze 로 바꾼 뒤(예산 알림 1,000원 정도 권장)',
+    '  `npm run deploy:auto` 를 다시 실행하세요. 개인 사용량은 무료 한도 안이라 보통 요금이 나오지 않습니다.',
+  ].join('\n'));
+}
+
 console.log(`\n✅ 배포 완료: https://${projectId}.firebaseapp.com`);
-  console.log('   (휴대폰 홈 화면에는 위 주소로 들어가서 추가하세요. .web.app 주소는 자동으로 이 주소로 이동합니다.)');
+console.log('   (휴대폰 홈 화면에는 위 주소로 들어가서 추가하세요. .web.app 주소는 자동으로 이 주소로 이동합니다.)');
+if (!functionsOk) console.log('   (아이폰 캘린더 가져오기는 Blaze 요금제로 바꾼 뒤 다시 배포하면 켜집니다.)');
 console.log('   (Firestore 색인은 몇 분 뒤에 준비됩니다. 그 전에는 일정 목록이 잠시 비어 보일 수 있습니다.)');
