@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   defaultView: 'month',
   hiddenCalendarIds: [],
   notifications: { enabled: false, defaultMinutes: 10 },
+  gridStyle: 'classic', // classic(반듯한 선) | sketch(손그림 선)
 };
 
 export function profileFromAuth(user) {
@@ -36,7 +37,7 @@ export async function ensureUserProfile(db, user) {
         ...p, settings: DEFAULT_SETTINGS, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
       tx.set(calRef, newCalendarDoc(user, {
-        name: '내 캘린더', description: '나만 보는 개인 캘린더', color: '#4f6bed', shared: false,
+        name: '내 캘린더', description: '나만 보는 개인 캘린더', color: '#6f95c4', shared: false,
       }));
       return { created: true, personalCalendarId: calRef.id };
     }

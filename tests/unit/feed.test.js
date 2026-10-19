@@ -78,3 +78,14 @@ describe('layout', () => {
     expect([...g.keys()]).toEqual(['2026-10-30', '2026-10-31']);
   });
 });
+
+import { holidayOf, specialDayOf } from '../../src/lib/holidays.js';
+describe('공휴일', () => {
+  it('레퍼런스 달력(2026년 10월)과 일치', () => {
+    expect(holidayOf('2026-10-03')).toBe('개천절');
+    expect(holidayOf('2026-10-05')).toBe('대체휴일');
+    expect(holidayOf('2026-10-09')).toBe('한글날');
+    expect(holidayOf('2026-10-10')).toBeNull();
+    expect(specialDayOf('2026-10-31')).toBe('할로윈');
+  });
+});

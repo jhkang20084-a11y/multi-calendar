@@ -12,6 +12,7 @@ import { createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '
 import { subscribe, unsubscribe, subscriptionId } from '../../src/services/subscriptions.js';
 import { addTodo, toggleTodo } from '../../src/services/todos.js';
 import { ensureUserProfile } from '../../src/services/users.js';
+import { saveMemo } from '../../src/services/memos.js';
 
 const PROJECT = 'demo-multi-calendar';
 let env;
@@ -355,5 +356,18 @@ describe('구독', () => {
     // 권한이 없으므로 구독을 다시 활성화할 수도 없음
     await assertFails(updateDoc(doc(b, 'subscriptions', subscriptionId('bob', couple, family)), { active: false, updatedAt: serverTimestamp() }).then(() =>
       updateDoc(doc(b, 'subscriptions', subscriptionId('bob', couple, family)), { active: true, updatedAt: serverTimestamp() })));
+  });
+});
+
+describe('이달의 메모', () => {
+  it('멤버는 읽고, 편집자만 쓰며, 외부인은 읽지 못함', async () => {
+    const calId = await sharedWithBob('viewer');
+    await assertSucceeds(saveMemo(dbOf('alice'), users.alice, calId, '2026-10', '10월엔 단풍 보러 가기'));
+    await assertSucceeds(getDoc(doc(dbOf('bob'), 'calendars', calId, 'memos', '2026-10')));
+    await assertFails(saveMemo(dbOf('bob'), users.bob, calId, '2026-10', '열람자 수정'));
+    await assertFails(getDoc(doc(dbOf('carol'), 'calendars', calId, 'memos', '2026-10')));
+    await assertFails(saveMemo(dbOf('alice'), users.alice, calId, 'bad-id', 'x'));
+    await changeMemberRole(dbOf('alice'), users.alice, calId, 'bob', 'editor');
+    await assertSucceeds(saveMemo(dbOf('bob'), users.bob, calId, '2026-10', '편집자 수정'));
   });
 });

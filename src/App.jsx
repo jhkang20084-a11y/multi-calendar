@@ -4,7 +4,9 @@ import { db, isConfigured, signInWithGoogle, usingEmulators, logout } from './fi
 import { useAuthState } from './hooks/useAuthState.js';
 import { useOnline } from './hooks/useOnline.js';
 import { useEventFeed, useMySecrets } from './hooks/useEventFeed.js';
-import { UiProvider, useUi, Spinner, ErrorBoundary } from './components/ui.jsx';
+import { UiProvider, useUi, Spinner, ErrorBoundary, Torn, Hearts, SketchFilter } from './components/ui.jsx';
+import { DayNotes, MonthMemo } from './components/Notes.jsx';
+import { coverStyle } from './lib/colors.js';
 import { MonthView, TimeGridView, ListView } from './components/Views.jsx';
 import { EventEditor } from './components/EventEditor.jsx';
 import { EventDetail } from './components/EventDetail.jsx';
@@ -62,9 +64,11 @@ function Login({ error }) {
   return (
     <div className="center-screen login">
       <div className="card">
-        <div className="logo">📅</div>
-        <h1>함께 캘린더</h1>
-        <p>개인 일정부터 연인·가족·친구·모임 캘린더까지.<br />여러 캘린더를 만들고, 초대하고, 실시간으로 함께 관리하세요.</p>
+        <div className="login-year">{new Date().getFullYear()}</div>
+        <Hearts />
+        <h1 className="login-title">Calendar</h1>
+        <hr className="login-rule" />
+        <p className="login-sub">우리의 하루를 함께 적는 작은 종이 달력.<br />나만의 달력부터 연인·가족·친구와 함께 쓰는 달력까지.</p>
         <button className="btn btn-google" disabled={busy} onClick={async () => {
           setBusy(true); setErr('');
           try { await signInWithGoogle(); } catch (e) { setErr(friendlyError(e)); } finally { setBusy(false); }
@@ -146,6 +150,8 @@ function Main({ user }) {
   const [focus, setFocusState] = useState(() => { try { return localStorage.getItem('focus') || 'all'; } catch { return 'all'; } });
   const setFocus = (f) => { setFocusState(f); try { localStorage.setItem('focus', f); } catch { /* 저장소 사용 불가 */ } };
   const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => todayISO(tz));
   const [listFrom, setListFrom] = useState(() => todayISO(tz));
   const [listTo, setListTo] = useState(() => addDays(todayISO(tz), 30));
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -201,18 +207,25 @@ function Main({ user }) {
     const next = currentView === 'month' ? dt.plus({ months: dir }).startOf('month')
       : currentView === 'week' ? dt.plus({ weeks: dir }) : dt.plus({ days: dir });
     setAnchor(next.toISODate());
+    setSelectedDate(currentView === 'month' ? (next.toISODate().slice(0, 7) === today.slice(0, 7) ? today : next.startOf('month').toISODate()) : next.toISODate());
   }
 
-  function title() {
-    const a = DateTime.fromISO(anchor).setLocale('ko');
-    if (currentView === 'month') return a.toFormat('yyyy년 M월');
-    if (currentView === 'day') return a.toFormat('yyyy년 M월 d일 (ccc)');
+  const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const anchorDT = DateTime.fromISO(anchor).setLocale('ko');
+  function subtitle() {
     if (currentView === 'week') {
-      const s = DateTime.fromISO(range.startDate).setLocale('ko');
-      const e = DateTime.fromISO(range.endDate).setLocale('ko');
-      return s.month === e.month ? `${s.toFormat('yyyy년 M월 d일')} – ${e.toFormat('d일')}` : `${s.toFormat('M월 d일')} – ${e.toFormat('M월 d일')}`;
+      const st = DateTime.fromISO(range.startDate).setLocale('ko');
+      const en = DateTime.fromISO(range.endDate).setLocale('ko');
+      return `${st.toFormat('M월 d일')} – ${en.toFormat(st.month === en.month ? 'd일' : 'M월 d일')}`;
     }
-    return '일정 목록';
+    if (currentView === 'day') return anchorDT.toFormat('M월 d일 cccc');
+    if (currentView === 'list') return '일정 목록';
+    return `${anchorDT.month}월`;
+  }
+  function goToday() {
+    setAnchor(today);
+    setSelectedDate(today);
+    if (currentView === 'list') { setListFrom(today); setListTo(addDays(today, 30)); }
   }
 
   function openCreate(date, hour) {
@@ -250,8 +263,13 @@ function Main({ user }) {
 
   if (!calendars || !profile) return <div className="center-screen"><Spinner label="캘린더 불러오는 중…" /></div>;
 
+  const monthName = MONTHS_EN[(currentView === 'list' ? DateTime.fromISO(listFrom) : anchorDT).month - 1];
+  const viewName = { month: '월', week: '주', day: '일', list: '목록' };
+  const showCover = focusedCal && focusedCal.coverImage && currentView === 'month';
+
   return (
     <div className="app">
+      <SketchFilter />
       <Sidebar
         user={user} profile={profile} calendars={calList} subscriptions={subscriptions}
         focus={focus} setFocus={setFocus} hiddenIds={hiddenIds} toggleHidden={toggleHidden} statusByCal={statusByCal}
@@ -263,77 +281,114 @@ function Main({ user }) {
         open={sidebarOpen} onCloseMobile={() => setSidebarOpen(false)}
       />
       <main className="main">
-        <header className="toolbar">
-          <button className="icon-btn menu-btn" onClick={() => setSidebarOpen(true)} aria-label="캘린더 메뉴">☰
+        <header className="topbar">
+          <button className="icon-btn menu-btn" onClick={() => setSidebarOpen(true)} aria-label="캘린더 메뉴">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16M4 12h11M4 17h16" /></svg>
             {invitations.length > 0 && <span className="badge-dot" />}
           </button>
-          <div className="nav-group">
-            <button className="btn btn-small" onClick={() => { setAnchor(today); if (currentView === 'list') { setListFrom(today); setListTo(addDays(today, 30)); } }}>오늘</button>
-            <button className="icon-btn" onClick={() => move(-1)} aria-label="이전">‹</button>
-            <button className="icon-btn" onClick={() => move(1)} aria-label="다음">›</button>
+          <div className="topbar-center">
+            <span className="topbar-year">{(currentView === 'list' ? DateTime.fromISO(listFrom) : anchorDT).year}</span>
+            <Hearts />
           </div>
-          <h1 className="title">{title()}</h1>
-          <div className="toolbar-right">
-            <SyncBadge online={online} status={syncStatus} />
-            <input className="search" type="search" placeholder="일정 검색" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="일정 검색" />
+          <SyncBadge online={online} status={syncStatus} />
+          <button className="icon-btn" onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setSearch(''); }} aria-label="검색 열기" aria-expanded={searchOpen}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+          </button>
+        </header>
+        {searchOpen && (
+          <div className="searchbar">
+            <input type="search" autoFocus placeholder="제목, 장소, 메모로 검색" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="일정 검색" />
+          </div>
+        )}
+
+        <div className="sheet-col">
+          {showCover && (
+            <div className="cover-banner" style={coverStyle(focusedCal.coverImage, focusedCal.color)}>
+              <div className="cover-title"><span className="small">{!focusedCal.shared ? '나만의 달력' : focusedCal.memberIds.length > 1 ? `${focusedCal.memberIds.length}명이 함께 쓰는 달력` : '함께 쓸 사람을 초대해 보세요'}</span><b>{focusedCal.name}</b></div>
+              <Torn />
+            </div>
+          )}
+
+          <div className={`masthead ${currentView === 'month' ? '' : 'compact'}`}>
+            <h1 className="month-name">{monthName}</h1>
+            <div className="masthead-sub">
+              <span>{subtitle()}</span>
+              <span aria-hidden>·</span>
+              <button className="cal-switch" onClick={() => setSidebarOpen(true)}>
+                <span className="dot" style={{ background: focusedCal?.color || 'var(--ink)' }} />
+                {focusedCal ? focusedCal.name : `통합 보기 (${feed.sources.length})`}
+                <span className="chev">▼</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="controls">
+            <div className="nav-group">
+              <button className="icon-btn" onClick={() => move(-1)} aria-label="이전"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></button>
+              <button className="btn btn-small" onClick={goToday}>오늘</button>
+              <button className="icon-btn" onClick={() => move(1)} aria-label="다음"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5l7 7-7 7" /></svg></button>
+            </div>
             <div className="seg view-seg" role="tablist" aria-label="보기 방식">
-              {[['month', '월'], ['week', '주'], ['day', '일'], ['list', '목록']].map(([v, l]) => (
+              {Object.entries(viewName).map(([v, l]) => (
                 <button key={v} role="tab" aria-selected={currentView === v} className={currentView === v ? 'on' : ''} onClick={() => setView(v)}>{l}</button>
               ))}
             </div>
           </div>
-        </header>
 
-        <div className="context-bar">
-          {focus === 'all' ? (
-            <span>통합 보기 · {feed.sources.length}개 캘린더</span>
-          ) : (
-            <span>
-              <span className="dot" style={{ background: focusedCal?.color }} /> <b>{focusedCal?.name}</b>
-              {feed.sources.filter((s) => s.subscribed).length > 0 && (
-                <> · 구독: {feed.sources.filter((s) => s.subscribed).map((s) => (
+          {(focus !== 'all' || currentView === 'list') && (
+            <div className="context-bar">
+              {focus !== 'all' && feed.sources.filter((s) => s.subscribed).length > 0 && (
+                <span>구독 {feed.sources.filter((s) => s.subscribed).map((s) => (
                   <span key={s.calendarId} className="legend-chip" style={{ '--c': calendarsById.get(s.calendarId)?.color }}>🔗 {calendarsById.get(s.calendarId)?.name}</span>
-                ))}</>
+                ))}</span>
               )}
-              <button className="link" onClick={() => setDialog({ type: 'calSettings', calId: focus, tab: 'subs' })}>구독 관리</button>
+              {focus !== 'all' && <button className="link" onClick={() => setDialog({ type: 'calSettings', calId: focus, tab: 'subs' })}>구독 관리</button>}
               {focusedCal?.shared && focusedCal.ownerId === user.uid && <button className="link" onClick={() => setDialog({ type: 'calSettings', calId: focus, tab: 'invites' })}>초대</button>}
-            </span>
+              {currentView === 'list' && (
+                <span className="list-range">
+                  <input type="date" value={listFrom} onChange={(e) => setListFrom(e.target.value)} aria-label="시작일" />
+                  ~
+                  <input type="date" value={listTo} min={listFrom} max={addDays(listFrom, 366)} onChange={(e) => setListTo(e.target.value)} aria-label="종료일" />
+                </span>
+              )}
+            </div>
           )}
-          {currentView === 'list' && (
-            <span className="list-range">
-              <input type="date" value={listFrom} onChange={(e) => setListFrom(e.target.value)} aria-label="시작일" />
-              ~
-              <input type="date" value={listTo} min={listFrom} max={addDays(listFrom, 366)} onChange={(e) => setListTo(e.target.value)} aria-label="종료일" />
-            </span>
+
+          {authExpired && <div className="banner banner-error">로그인이 만료되었습니다. <button className="link" onClick={() => logout()}>다시 로그인</button></div>}
+          {listenError && <div className="banner banner-error">{listenError}</div>}
+          {errorCals.length > 0 && (
+            <div className="banner banner-error">
+              {errorCals.map((id) => calendarsById.get(id)?.name || '알 수 없는 캘린더').join(', ')}: {statusByCal.get(errorCals[0])?.error}
+            </div>
           )}
-        </div>
+          {feed.inaccessible.length > 0 && (
+            <div className="banner">접근 권한이 없어진 구독 {feed.inaccessible.length}개는 표시하지 않습니다. 캘린더 설정 &gt; 구독에서 해제할 수 있습니다.</div>
+          )}
+          {feed.overflow.length > 0 && (
+            <div className="banner">한 번에 실시간으로 표시할 수 있는 캘린더는 {feed.sources.length}개입니다. 일부 캘린더를 숨기면 나머지가 표시됩니다.</div>
+          )}
+          {!online && <div className="banner">오프라인이에요. 마지막으로 받은 내용을 보여 주고, 고친 내용은 연결되면 보내요.</div>}
+          {search && <div className="banner">"{search}" 검색 결과 {instances.length}개 (이 기간 안에서)</div>}
 
-        {authExpired && <div className="banner banner-error">로그인이 만료되었습니다. <button className="link" onClick={() => logout()}>다시 로그인</button></div>}
-        {listenError && <div className="banner banner-error">{listenError}</div>}
-        {errorCals.length > 0 && (
-          <div className="banner banner-error">
-            {errorCals.map((id) => calendarsById.get(id)?.name || '알 수 없는 캘린더').join(', ')}: {statusByCal.get(errorCals[0])?.error}
-          </div>
-        )}
-        {feed.inaccessible.length > 0 && (
-          <div className="banner">접근 권한이 없어진 구독 {feed.inaccessible.length}개는 표시하지 않습니다. 캘린더 설정 &gt; 구독에서 해제할 수 있습니다.</div>
-        )}
-        {feed.overflow.length > 0 && (
-          <div className="banner">한 번에 실시간으로 표시할 수 있는 캘린더는 {feed.sources.length}개입니다. 일부 캘린더를 숨기면 나머지가 표시됩니다.</div>
-        )}
-        {!online && <div className="banner">오프라인입니다. 마지막으로 받은 데이터를 보여 주며, 변경 사항은 연결되면 전송됩니다.</div>}
-
-        <section className="view-area">
           {calList.length === 0 ? (
             <div className="empty">
-              <p>아직 캘린더가 없습니다.</p>
+              <p>아직 캘린더가 없어요.</p>
               <button className="btn btn-primary" onClick={() => setDialog({ type: 'newCal' })}>캘린더 만들기</button>
             </div>
           ) : currentView === 'month' ? (
-            <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
-              onOpen={(inst) => setDialog({ type: 'detail', inst })}
-              onCreateAt={(d) => openCreate(d)}
-              onPickDate={(d) => { setAnchor(d); setView('day'); }} />
+            <>
+              <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
+                selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
+                onOpen={(inst) => setDialog({ type: 'detail', inst })}
+                onSelectDate={setSelectedDate}
+                onCreateAt={(d) => openCreate(d)}
+                onSwipe={move} />
+              <div className="notes-grid">
+                <DayNotes date={selectedDate} instances={instances} tz={tz}
+                  onOpen={(inst) => setDialog({ type: 'detail', inst })} onCreate={(d) => openCreate(d)} />
+                <MonthMemo user={user} calendar={focusedCal || null} month={anchor.slice(0, 7)} />
+              </div>
+            </>
           ) : currentView === 'list' ? (
             <ListView instances={instances} range={range} today={today} tz={tz} emptyText={emptyText}
               onOpen={(inst) => setDialog({ type: 'detail', inst })} />
@@ -342,14 +397,11 @@ function Main({ user }) {
               days={Array.from({ length: currentView === 'week' ? 7 : 1 }, (_, i) => addDays(range.startDate, i))}
               instances={instances} today={today} tz={tz}
               onOpen={(inst) => setDialog({ type: 'detail', inst })}
-              onCreateAt={(d, h) => openCreate(d, h)} />
+              onCreateAt={(d, h) => openCreate(d, h)} onSwipe={move} />
           )}
-          {calList.length > 0 && currentView !== 'list' && instances.length === 0 && syncStatus !== 'loading' && (
-            <div className="empty-hint">{emptyText}</div>
-          )}
-        </section>
+        </div>
 
-        <button className="fab" onClick={() => openCreate()} aria-label="새 일정">＋</button>
+        <button className="fab" onClick={() => openCreate(currentView === 'month' ? selectedDate : undefined)} aria-label="새 일정">＋</button>
       </main>
 
       {dialog?.type === 'editor' && (

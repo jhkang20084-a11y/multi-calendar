@@ -11,6 +11,17 @@
 - 호스팅: Firebase Hosting, PWA(홈 화면에 추가) 지원
 - 시간대: 기본 Asia/Seoul, 일정마다 시간대 저장
 
+### 디자인 (빈티지 종이 달력, 휴대폰 우선)
+- 따뜻한 종이색 배경과 은은한 종이 질감, 잉크색 글씨, 얇은 격자 + 위아래 굵은 선
+- 큰 영문 월 이름(Abril Fatface), 띄어 쓴 연도 "2 0 2 6"과 ♥♥♥ 장식, 영문 요일(SUN~SAT)
+- 일요일·공휴일 빨강, 토요일 파랑, 날짜 아래 공휴일 이름(개천절·대체휴일·한글날 …)과 기념일(할로윈 등)
+- 오늘은 형광펜, 고른 날은 손으로 그린 동그라미로 표시
+- 설정에서 **달력 선: 반듯한 선 / 손그림 선**(삐뚤빼뚤한 손그림 격자) 선택
+- 달력 아래 줄 노트 두 칸: **Schedule**(누른 날짜의 일정) + **Memo**(캘린더별 이달의 메모, 멤버끼리 공유, 손글씨체)
+- 캘린더 커버: 튤립·하트·깅엄 체크·물방울 등 일러스트나 내 사진, 아래쪽은 찢어진 종이 가장자리
+- 휴대폰: 달력을 좌우로 밀어 이전/다음 달, 아래에서 올라오는 종이 시트, 큰 터치 영역, 상단 알림
+- 라이트/다크(밤의 종이) 모드, 글꼴은 앱에 포함되어 오프라인·PWA에서도 같은 모양
+
 ---
 
 ## 1. 빠른 시작 (Firebase 계정 없이 로컬에서 체험)
@@ -86,11 +97,11 @@ npm run deploy
 
 | 명령 | 내용 | 필요 |
 |---|---|---|
-| `npm run test:unit` | 반복 일정 전개, D-day, 시간대, 통합 보기/구독 계산, 겹침 배치 (21개) | Node |
-| `npm run test:rules` | 보안 규칙 (18개): 소유자 위조, 초대 우회, 열람자 수정, 비공개 일정, 구독 우회 등 | Java |
+| `npm run test:unit` | 반복 일정 전개, D-day, 시간대, 통합 보기/구독 계산, 겹침 배치, 공휴일 (22개) | Node |
+| `npm run test:rules` | 보안 규칙 (19개, 이달의 메모 포함): 소유자 위조, 초대 우회, 열람자 수정, 비공개 일정, 구독 우회 등 | Java |
 | `npm run test:integration` | 두 사용자 실시간 동기화 (8개, 지시서 17장 시나리오) | Java |
 | `npm test` | 위 전부 | Java |
-| `node tests/e2e/ui-smoke.mjs` | 실제 브라우저(PC 화면 A + iPhone 13 화면 B) 15단계 UI 테스트, 스크린샷은 `test-results/` | `npm run emulators` + `npm run dev:emu` 실행 중, Chromium |
+| `node tests/e2e/ui-smoke.mjs` | 실제 브라우저(PC 화면 A + iPhone 13 화면 B) 16단계 UI 테스트(메모 공유·날짜 선택 포함), 스크린샷은 `test-results/` | `npm run emulators` + `npm run dev:emu` 실행 중, Chromium |
 
 필수 시나리오 ↔ 테스트 위치
 
@@ -120,6 +131,7 @@ calendars/{calendarId}                        이름, 설명, 색, 커버, share
     memberIds[]                               = 소유자+편집자+열람자 ("내 캘린더" 조회용)
     memberInfo{uid: {name,email,photoURL}}    표시용 멤버 정보
     createdBy, createdAt, updatedAt, updatedBy
+  /memos/{YYYY-MM}                            이달의 메모: text, updatedBy, updatedAt (멤버 읽기, 편집자 쓰기)
   /invitations/{소문자이메일}                 role, status(pending/accepted/declined/canceled), 초대자
   /events/{eventId}                           원본 일정 (구독용 복제 없음)
       calendarId, title, description, location, notes, color, category,
@@ -188,7 +200,10 @@ subscriptions/{uid__대상ID__원본ID}           ownerUid, targetCalendarId, so
 8. 체크리스트와 메모는 반복 일정의 **전체**에 공통으로 연결됩니다(회차별 체크리스트 아님).
 9. 일정을 다른 캘린더로 옮기는 기능, 캘린더 공개 링크(비멤버 공개)는 없습니다. 커버 사진은 400KB 이하로 줄여 캘린더 문서에 저장합니다.
 10. 한 화면에서 실시간으로 표시하는 캘린더는 최대 20개입니다(캘린더당 리스너 2개). 넘으면 안내가 나오고 일부를 숨겨야 합니다.
-11. 매월 31일 반복은 31일이 없는 달을 건너뛰고, 2월 29일 매년 반복(기념일)은 평년에 2월 28일로 표시됩니다.
+11. **공휴일은 표(`src/lib/holidays.js`)로 관리합니다.** 2025·2026년은 설날·추석·대체공휴일까지 넣었지만,
+    2027년은 양력 공휴일과 그 대체공휴일만 넣었습니다(설날·추석·부처님오신날 미포함). 임시공휴일 등 정부 발표에 맞춰 매년 갱신이 필요합니다.
+12. 손그림 선은 SVG 필터로 그리므로 아주 오래된 브라우저에서는 반듯한 선으로 보일 수 있습니다.
+13. 매월 31일 반복은 31일이 없는 달을 건너뛰고, 2월 29일 매년 반복(기념일)은 평년에 2월 28일로 표시됩니다.
 
 ## 10. 파일 구조
 ```
@@ -199,8 +214,9 @@ firestore.indexes.json            복합 색인
 index.html, public/               PWA manifest, 서비스 워커, 아이콘
 src/firebase.js                   Firebase 초기화, Google 로그인(팝업/리디렉션)
 src/services/                     Firestore 읽기/쓰기 (users, calendars, invitations, events, todos, subscriptions)
-src/lib/                          시간대·반복·D-day·통합 보기 계산(순수 함수)
+src/lib/                          시간대·반복·D-day·통합 보기 계산, 공휴일 표, 색상/커버 일러스트
 src/hooks/                        로그인 상태, 온라인 상태, 실시간 일정 리스너 관리
-src/components/                   화면 (월/주/일/목록, 일정 편집/상세, 캘린더 설정, 사이드바 등)
+src/components/                   화면 (월/주/일/목록, 줄 노트·메모, 일정 편집/상세, 캘린더 설정, 사이드바 등)
+src/styles.css                    빈티지 종이 달력 테마 (라이트/다크, 휴대폰 우선)
 tests/unit, tests/rules, tests/integration, tests/e2e
 ```

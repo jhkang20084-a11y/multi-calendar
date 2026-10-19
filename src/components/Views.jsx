@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { holidayOf, specialDayOf } from '../lib/holidays.js';
 import { DateTime } from 'luxon';
 import { groupByDate, layoutOverlaps } from '../lib/feed.js';
 import { formatTime, safeZone, addDays } from '../lib/time.js';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const WEEKDAYS_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const HOUR_PX = 48;
 
 function weekdayLabels(weekStartsOn) {
@@ -32,49 +34,76 @@ function Chip({ inst, tz, onOpen, compact, continued }) {
   );
 }
 
-export function MonthView({ range, anchorDate, instances, today, tz, weekStartsOn, onOpen, onCreateAt, onPickDate }) {
+/** 좌우로 밀어서 이전/다음으로 이동 */
+function useSwipe(onSwipe) {
+  const start = useRef(null);
+  return {
+    onTouchStart: (e) => { const t = e.touches[0]; start.current = { x: t.clientX, y: t.clientY }; },
+    onTouchEnd: (e) => {
+      if (!start.current) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.current.x;
+      const dy = t.clientY - start.current.y;
+      start.current = null;
+      if (Math.abs(dx) > 60 && Math.abs(dy) < 50) onSwipe(dx < 0 ? 1 : -1);
+    },
+  };
+}
+
+export function MonthView({
+  range, anchorDate, instances, today, tz, weekStartsOn, selectedDate, sketch,
+  onOpen, onSelectDate, onCreateAt, onSwipe,
+}) {
   const days = datesBetween(range.startDate, range.endDate);
   const byDate = useMemo(() => groupByDate(instances, range.startDate, range.endDate), [instances, range.startDate, range.endDate]);
   const month = anchorDate.slice(0, 7);
+  const swipe = useSwipe(onSwipe);
+  // 마지막 주가 모두 다음 달이면 그리지 않는다(종이 달력처럼 5줄)
+  const visible = days.slice(35).every((d) => d.slice(0, 7) !== month) ? days.slice(0, 35) : days;
   const MAX = 3;
   return (
-    <div className="month">
+    <div className={`month ${sketch ? 'sketch' : ''}`} {...swipe}>
       <div className="month-head">
-        {weekdayLabels(weekStartsOn).map((w, i) => (
-          <div key={w} className={`wd ${(i + weekStartsOn) % 7 === 0 ? 'sun' : ''} ${(i + weekStartsOn) % 7 === 6 ? 'sat' : ''}`}>{w}</div>
-        ))}
-      </div>
-      <div className="month-grid">
-        {days.map((d) => {
-          const list = byDate.get(d) || [];
-          const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
-          return (
-            <div key={d} className={`cell ${d.slice(0, 7) !== month ? 'other' : ''} ${d === today ? 'today' : ''}`}
-              onClick={() => onCreateAt(d)} role="gridcell" aria-label={`${d} 일정 ${list.length}개`}>
-              <button type="button" className={`daynum ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onPickDate(d); }}>{Number(d.slice(8))}</button>
-              <div className="cell-events">
-                {list.slice(0, MAX).map((inst) => (
-                  <Chip key={inst.key} inst={inst} tz={tz} onOpen={onOpen} compact continued={inst.startDate < d} />
-                ))}
-                {list.length > MAX && (
-                  <button type="button" className="more" onClick={(e) => { e.stopPropagation(); onPickDate(d); }}>+{list.length - MAX}개</button>
-                )}
-              </div>
-              {list.length > 0 && (
-                <div className="cell-dots" aria-hidden>
-                  {list.slice(0, 4).map((inst) => <span key={inst.key} style={{ background: inst.color }} />)}
-                </div>
-              )}
-            </div>
-          );
+        {weekdayLabels(weekStartsOn).map((w, i) => {
+          const dow = (i + weekStartsOn) % 7;
+          return <div key={w} className={`wd ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''}`}>{WEEKDAYS_EN[dow]}</div>;
         })}
+      </div>
+      <div className="month-body">
+        <div className="month-lines" aria-hidden>{visible.map((d) => <div key={d} />)}</div>
+        <div className="month-grid" role="grid">
+          {visible.map((d) => {
+            const list = byDate.get(d) || [];
+            const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
+            const hol = holidayOf(d);
+            const special = !hol && specialDayOf(d);
+            return (
+              <div key={d}
+                className={`cell ${d.slice(0, 7) !== month ? 'other' : ''} ${d === today ? 'today' : ''} ${d === selectedDate ? 'selected' : ''}`}
+                onClick={() => onSelectDate(d)} onDoubleClick={() => onCreateAt(d)}
+                role="gridcell" aria-selected={d === selectedDate} aria-label={`${d}${hol ? ` ${hol}` : ''} 일정 ${list.length}개`}>
+                <div className="cell-top">
+                  <span className={`daynum ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''} ${hol ? 'holiday' : ''}`}>{Number(d.slice(8))}</span>
+                  {hol && <span className="holiday-name">{hol}</span>}
+                  {special && <span className="holiday-name special">{special}</span>}
+                </div>
+                <div className="cell-events">
+                  {list.slice(0, MAX).map((inst) => (
+                    <Chip key={inst.key} inst={inst} tz={tz} onOpen={onOpen} compact continued={inst.startDate < d} />
+                  ))}
+                  {list.length > MAX && <span className="more">+{list.length - MAX}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
-export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt }) {
+export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt, onSwipe }) {
+  const swipe = useSwipe(onSwipe);
   const zone = safeZone(tz);
   const scroller = useRef(null);
   const [now, setNow] = useState(Date.now());
@@ -101,15 +130,18 @@ export function TimeGridView({ days, instances, today, tz, onOpen, onCreateAt })
   });
 
   return (
-    <div className="tgrid">
+    <div className="tgrid" {...swipe}>
       <div className="tgrid-head" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
         <div />
         {days.map((d) => {
           const dt = DateTime.fromISO(d);
+          const dow = dt.weekday % 7;
+          const hol = holidayOf(d);
           return (
-            <div key={d} className={`tgrid-day ${d === today ? 'today' : ''}`}>
-              <span className="wdname">{WEEKDAYS[dt.weekday % 7]}</span>
+            <div key={d} className={`tgrid-day ${d === today ? 'today' : ''} ${dow === 0 ? 'sun' : ''} ${dow === 6 ? 'sat' : ''} ${hol ? 'holiday' : ''}`}>
+              <span className="wdname">{WEEKDAYS_EN[dow]}</span>
               <span className="wdnum">{dt.day}</span>
+              {hol && <span className="hname">{hol}</span>}
             </div>
           );
         })}
@@ -173,7 +205,7 @@ export function ListView({ instances, range, today, tz, onOpen, emptyText }) {
         const dt = DateTime.fromISO(d).setLocale('ko');
         return (
           <section key={d} className={`list-day ${d === today ? 'today' : ''}`}>
-            <h3>{dt.toFormat('M월 d일 (ccc)')}{d === today && <span className="badge">오늘</span>}</h3>
+            <h3><span className="dlabel">{dt.toFormat('M월 d일 (ccc)')}</span>{holidayOf(d) && <span className="hname">{holidayOf(d)}</span>}{d === today && <span className="badge">오늘</span>}</h3>
             {byDate.get(d).map((inst) => (
               <button type="button" key={inst.key} className={`list-item ${inst.ev.completed ? 'chip-done' : ''}`} onClick={() => onOpen(inst)}>
                 <span className="list-color" style={{ background: inst.color }} />

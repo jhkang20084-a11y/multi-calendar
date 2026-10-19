@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DateTime } from 'luxon';
 import { Modal, ColorPicker, useUi } from './ui.jsx';
 import { PALETTE } from '../lib/colors.js';
-import { TIMEZONES, msToLocalInput, localInputToMs, safeZone, addDays } from '../lib/time.js';
+import { TIMEZONES, msToLocalInput, localInputToMs, safeZone, addDays, daysBetween } from '../lib/time.js';
 import { VISIBILITY_LABELS, createEvent, updateEvent, saveRecurringOccurrence } from '../services/events.js';
 import { db } from '../firebase.js';
 
@@ -169,7 +169,7 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
         </label>
         <label className="field">
           <span>제목</span>
-          <input value={form.title} onChange={set('title')} maxLength={200} placeholder={anniversary ? '예: 사귄 날, 엄마 생신' : '일정 제목'} autoFocus />
+          <input className="title-input" value={form.title} onChange={set('title')} maxLength={200} placeholder={anniversary ? '예: 사귄 날, 엄마 생신' : '일정 제목'} autoFocus />
         </label>
 
         {!anniversary && (
@@ -180,7 +180,8 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
             <label className="field"><span>{anniversary ? '기념일(시작일)' : '시작일'}</span>
               <input type="date" value={form.startDate} onChange={(e) => {
                 const v = e.target.value;
-                setForm((f) => ({ ...f, startDate: v, endDate: f.endDate < v ? v : f.endDate }));
+                // 시작일을 옮기면 일정 길이(며칠짜리인지)를 유지하며 종료일도 함께 이동
+                setForm((f) => ({ ...f, startDate: v, endDate: v && f.startDate && f.endDate >= f.startDate ? addDays(v, daysBetween(f.startDate, f.endDate)) : v }));
               }} /></label>
             {!anniversary && (
               <label className="field"><span>종료일</span>
@@ -188,7 +189,7 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
             )}
           </div>
         ) : (
-          <div className="row2">
+          <div className="row2 row-dt">
             <label className="field"><span>시작</span>
               <input type="datetime-local" value={form.startLocal} onChange={(e) => {
                 const v = e.target.value;

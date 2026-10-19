@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Avatar, Modal, useUi } from './ui.jsx';
+import { Avatar, Modal, useUi, Torn } from './ui.jsx';
 import { db, logout } from '../firebase.js';
 import { updateSettings } from '../services/users.js';
 import { roleOf, ROLE_LABELS } from '../services/calendars.js';
@@ -17,7 +17,7 @@ export function SyncBadge({ online, status }) {
     ok: ['동기화됨', '모든 변경 사항이 실시간으로 반영되고 있습니다.'],
   };
   const key = !online ? 'offline' : status;
-  return <span className={`sync sync-${key}`} title={map[key][1]}><span className="sync-dot" />{map[key][0]}</span>;
+  return <span className={`sync sync-${key}`} title={map[key][1]} aria-label={map[key][0]}><span className="sync-dot" /><span className="sync-text">{map[key][0]}</span></span>;
 }
 
 export function Sidebar({
@@ -42,7 +42,9 @@ export function Sidebar({
             <b>{profile?.displayName || user.displayName}</b>
             <span className="muted small">{user.email}</span>
           </div>
-          <button className="icon-btn" onClick={andClose(onOpenSettings)} aria-label="설정">⚙</button>
+          <button className="icon-btn" onClick={andClose(onOpenSettings)} aria-label="설정">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+          </button>
         </div>
 
         {invitationsCount > 0 && (
@@ -52,6 +54,7 @@ export function Sidebar({
         {focused && (
           <div className="focus-cover" style={coverStyle(focused.coverImage, focused.color)}>
             <span>{focused.name}</span>
+            <Torn />
           </div>
         )}
 
@@ -62,7 +65,7 @@ export function Sidebar({
             <span className="muted small">{calendars.length - hiddenIds.filter((id) => calendars.some((c) => c.id === id)).length}개 표시</span>
           </button>
           <div className="cal-section-title">
-            <span>내 캘린더</span>
+            <span>MY CALENDARS</span>
             <button className="icon-btn" onClick={andClose(onNewCalendar)} aria-label="새 캘린더">＋</button>
           </div>
           {calendars.length === 0 && <p className="muted small pad">캘린더가 없습니다. ＋ 를 눌러 만드세요.</p>}
@@ -89,7 +92,7 @@ export function Sidebar({
         </nav>
 
         <div className="dday-panel">
-          <div className="cal-section-title"><span>기념일 · D-day</span></div>
+          <div className="cal-section-title"><span>D-DAY ♡</span></div>
           {ddayItems.length === 0 && <p className="muted small pad">기념일을 등록하면 여기에 표시됩니다.</p>}
           {ddayItems.map((d) => (
             <div key={d.key} className="dday-item">
@@ -156,6 +159,12 @@ export function SettingsDialog({ user, profile, onClose }) {
             <option value="dark">다크</option>
           </select>
         </label>
+        <div className="field"><span>달력 선</span>
+          <div className="seg">
+            <button type="button" className={(s.gridStyle || 'classic') === 'classic' ? 'on' : ''} onClick={() => set('gridStyle', 'classic')}>반듯한 선</button>
+            <button type="button" className={s.gridStyle === 'sketch' ? 'on' : ''} onClick={() => set('gridStyle', 'sketch')}>손그림 선</button>
+          </div>
+        </div>
         <label className="field"><span>표시 시간대</span>
           <select value={s.timeZone} onChange={(e) => set('timeZone', e.target.value)}>
             {[...new Set([s.timeZone, ...TIMEZONES])].map((z) => <option key={z}>{z}</option>)}

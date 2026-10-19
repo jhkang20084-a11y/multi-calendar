@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Avatar, ColorPicker, useUi } from './ui.jsx';
+import { Modal, Avatar, ColorPicker, useUi, Torn } from './ui.jsx';
 import { db } from '../firebase.js';
 import { PALETTE, COVER_PRESETS, coverStyle, resizeImage } from '../lib/colors.js';
 import {
@@ -18,13 +18,13 @@ function CoverPicker({ value, color, onChange }) {
   const { toast } = useUi();
   return (
     <div className="field">
-      <span>커버 이미지</span>
-      <div className="cover-preview" style={coverStyle(value, color)} />
+      <span>커버</span>
+      <div className="cover-preview" style={coverStyle(value, color)}><Torn /></div>
       <div className="cover-presets">
-        <button type="button" className={`cover-opt ${!value ? 'selected' : ''}`} style={coverStyle('', color)} onClick={() => onChange('')} aria-label="대표 색상" />
-        {COVER_PRESETS.map((g, i) => (
-          <button type="button" key={g} className={`cover-opt ${value === `preset:${i}` ? 'selected' : ''}`} style={{ background: g }}
-            onClick={() => onChange(`preset:${i}`)} aria-label={`커버 ${i + 1}`} />
+        <button type="button" className={`cover-opt ${!value ? 'selected' : ''}`} style={coverStyle('', color)} onClick={() => onChange('')} aria-label="대표 색상" title="대표 색상" />
+        {COVER_PRESETS.map((p, i) => (
+          <button type="button" key={p.name} className={`cover-opt ${value === `preset:${i}` ? 'selected' : ''}`} style={p.css}
+            onClick={() => onChange(`preset:${i}`)} aria-label={`커버 ${p.name}`} title={p.name} />
         ))}
         <label className="btn btn-small">
           사진 선택
@@ -36,14 +36,14 @@ function CoverPicker({ value, color, onChange }) {
           }} />
         </label>
       </div>
-      <small>사진은 1200×400 크기로 줄여 캘린더 정보에 함께 저장됩니다.</small>
+      <small>커버는 달력 맨 위에 찢어진 종이처럼 표시됩니다. 사진은 1200×400 크기로 줄여 저장합니다.</small>
     </div>
   );
 }
 
 export function NewCalendarDialog({ user, defaultColorIndex = 1, onClose, onCreated }) {
   const { write } = useUi();
-  const [f, setF] = useState({ name: '', description: '', color: PALETTE[defaultColorIndex % PALETTE.length], coverImage: '', shared: true });
+  const [f, setF] = useState({ name: '', description: '', color: PALETTE[defaultColorIndex % PALETTE.length], coverImage: 'preset:0', shared: true });
   const [err, setErr] = useState('');
   const [saving, setSaving] = useState(false);
   async function submit(e) {
@@ -84,7 +84,7 @@ function InfoTab({ cal, user, onClose }) {
   if (!owner) {
     return (
       <div className="form">
-        <div className="cover-preview" style={coverStyle(cal.coverImage, cal.color)} />
+        <div className="cover-preview" style={coverStyle(cal.coverImage, cal.color)}><Torn /></div>
         <p><b>{cal.name}</b></p>
         {cal.description && <p className="muted">{cal.description}</p>}
         <p className="hint">캘린더 설정은 소유자만 바꿀 수 있습니다.</p>

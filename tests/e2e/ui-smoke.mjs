@@ -139,12 +139,13 @@ try {
   await shot(B, '10-b-dark-month');
 
   step('검색');
+  await A.getByRole('button', { name: '검색 열기' }).click();
   await A.getByRole('searchbox', { name: '일정 검색' }).fill('데이트');
   await A.locator('.list-item', { hasText: '저녁 데이트' }).waitFor();
   if (await A.locator('.list-item', { hasText: '엄마' }).count()) throw new Error('검색 필터 실패');
 
   step('12. 시간만 공개 / 비공개 일정: B에게 세부 내용 미노출');
-  await A.getByRole('searchbox', { name: '일정 검색' }).fill('');
+  await A.getByRole('button', { name: '검색 열기' }).click(); // 검색 닫기(검색어 초기화)
   await A.getByRole('tab', { name: '월' }).click();
   async function quickEvent(p, title, visibility, extra = async () => {}) {
     await p.getByRole('button', { name: '새 일정' }).click();
@@ -218,6 +219,20 @@ try {
   await ctxA.setOffline(false);
   await A.locator('.toast-success', { hasText: '동기화 완료' }).waitFor({ timeout: 20000 });
   await B.locator('.list-item', { hasText: '오프라인 메모' }).waitFor({ timeout: 20000 });
+
+  step('메모·날짜 선택: A가 이달의 메모 작성 → B(열람자)에게 실시간 표시, 날짜를 누르면 그날 일정');
+  await A.getByRole('tab', { name: '월' }).click();
+  await B.getByRole('tab', { name: '월' }).click();
+  await A.getByRole('textbox', { name: '이달의 메모' }).fill('10월엔 단풍 보러 가기 🍁');
+  await A.locator('.month-name').click(); // 포커스를 빼면 저장
+  await A.locator('.toast-success', { hasText: '메모를 저장했습니다' }).waitFor();
+  await B.locator('textarea.memo-area').evaluate((el) => el.scrollIntoView());
+  await B.waitForFunction(() => document.querySelector('textarea.memo-area')?.value.includes('단풍'), null, { timeout: 10000 });
+  if (!(await B.locator('textarea.memo-area').evaluate((el) => el.readOnly))) throw new Error('열람자 메모가 편집 가능');
+  const today2 = await A.evaluate(() => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }));
+  await B.locator(`.cell[aria-label^="${today2}"] .daynum`).click();
+  await B.locator('.ruled-item', { hasText: '저녁 데이트' }).waitFor();
+  await shot(B, '14-b-memo-schedule');
 
   console.log('\n✅ UI 스모크 테스트 통과');
 } catch (e) {

@@ -1,5 +1,6 @@
 import { Component, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { friendlyError } from '../services/errors.js';
+import { TORN_PATH } from '../lib/colors.js';
 
 // ── 토스트 + 저장 상태 표시 ───────────────────────────────────────────────
 const UiContext = createContext(null);
@@ -126,4 +127,29 @@ export class ErrorBoundary extends Component {
       </div>
     );
   }
+}
+
+/** 찢어진 종이 가장자리 (커버 아래쪽에 겹쳐 그림) */
+export function Torn({ className = 'torn' }) {
+  return (
+    <svg className={className} viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden>
+      <path d={TORN_PATH} fill="currentColor" />
+    </svg>
+  );
+}
+
+export function Hearts() {
+  return <span className="hearts" aria-hidden><span className="h1">♥</span><span className="h2">♥</span><span className="h3">♥</span></span>;
+}
+
+/** 손그림 격자선용 SVG 필터 (앱에 한 번만 넣는다) */
+export function SketchFilter() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+      <filter id="sketch">
+        <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="4" />
+        <feDisplacementMap in="SourceGraphic" scale="5" />
+      </filter>
+    </svg>
+  );
 }
