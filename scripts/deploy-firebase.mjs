@@ -40,7 +40,23 @@ if (key) {
   env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
   projectId = projectId || key.project_id;
 }
-if (!projectId) fail('프로젝트를 알 수 없습니다. FIREBASE_SERVICE_ACCOUNT 또는 FIREBASE_PROJECT_ID 를 설정하세요.');
+if (!projectId) {
+  // 로그인한 계정(firebase login / Cloud Shell)의 프로젝트가 하나뿐이면 그것을 쓴다.
+  let projects = [];
+  try {
+    const out = execFileSync('npx', ['firebase', 'projects:list', '--json', '--non-interactive'], { cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    projects = (JSON.parse(out).result || []).filter((p) => p.projectId && !p.projectId.startsWith('demo-'));
+  } catch {
+    fail('Firebase 에 로그인되어 있지 않습니다. 먼저 `npx firebase login --no-localhost` 를 실행하세요.');
+  }
+  if (projects.length === 1) projectId = projects[0].projectId;
+  else if (!projects.length) fail('이 계정에 Firebase 프로젝트가 없습니다. console.firebase.google.com 에서 먼저 만드세요.');
+  else {
+    console.log('\n프로젝트가 여러 개입니다. 배포할 프로젝트 ID 를 골라 아래처럼 다시 실행하세요:');
+    projects.forEach((p) => console.log(`  FIREBASE_PROJECT_ID=${p.projectId} npm run deploy:auto   (${p.displayName || ''})`));
+    process.exit(1);
+  }
+}
 
 const fb = (args, opts = {}) => execFileSync('npx', ['firebase', ...args, '--project', projectId, '--non-interactive'],
   { cwd: root, env, encoding: 'utf8', stdio: opts.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'] });
