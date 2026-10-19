@@ -82,13 +82,24 @@ npm run dev     # http://localhost:5173
 ```
 
 ## 4. Firebase Hosting 배포
+
+### 자동 배포 (권장): `npm run deploy:auto`
+환경 변수 `FIREBASE_SERVICE_ACCOUNT` 에 서비스 계정 키(JSON 내용 전체)를 넣고 실행하면
+웹 앱 등록 → 설정값(.env.production.local) 생성 → Firestore DB 확인/생성(서울) → Google 로그인 사용 여부 확인
+→ 공휴일 사본 갱신 → 빌드 → 호스팅·보안 규칙·색인 배포까지 한 번에 합니다.
+(로컬 PC 에서는 `npx firebase login` 후 `FIREBASE_PROJECT_ID=<프로젝트ID> npm run deploy:auto` 도 됩니다.)
+
+서비스 계정 키 만들기: Google Cloud 콘솔 > IAM 및 관리자 > 서비스 계정 > 서비스 계정 만들기
+→ 역할 **Firebase 관리자(Firebase Admin)** 추가 → 만든 계정 > 키 > 키 추가 > JSON.
+키는 비밀번호와 같으니 채팅·저장소에 올리지 말고 환경 변수(비밀 값)로만 넣으세요. 배포가 끝나면 키를 삭제해도 됩니다.
+
+### 수동 배포
 ```bash
 npm run deploy
-# = vite build && firebase deploy --only hosting,firestore:rules,firestore:indexes
+# = 공휴일 사본 갱신 + vite build + firebase deploy --only hosting,firestore:rules,firestore:indexes
 ```
 - 배포 후 주소: `https://<프로젝트ID>.web.app`
 - **인덱스 생성에는 몇 분이 걸립니다.** 그 사이 일정이 안 보이고 "index" 오류가 나면 잠시 기다리세요.
-  콘솔 > Firestore > 색인 에서 상태가 "사용 설정됨"이 되면 정상입니다.
 - 휴대폰에서 주소를 열고 Safari **공유 → 홈 화면에 추가**하면 앱처럼 쓸 수 있습니다.
 
 ---
@@ -200,8 +211,9 @@ subscriptions/{uid__대상ID__원본ID}           ownerUid, targetCalendarId, so
 8. 체크리스트와 메모는 반복 일정의 **전체**에 공통으로 연결됩니다(회차별 체크리스트 아님).
 9. 일정을 다른 캘린더로 옮기는 기능, 캘린더 공개 링크(비멤버 공개)는 없습니다. 커버 사진은 400KB 이하로 줄여 캘린더 문서에 저장합니다.
 10. 한 화면에서 실시간으로 표시하는 캘린더는 최대 20개입니다(캘린더당 리스너 2개). 넘으면 안내가 나오고 일부를 숨겨야 합니다.
-11. **공휴일은 표(`src/lib/holidays.js`)로 관리합니다.** 2025·2026년은 설날·추석·대체공휴일까지 넣었지만,
-    2027년은 양력 공휴일과 그 대체공휴일만 넣었습니다(설날·추석·부처님오신날 미포함). 임시공휴일 등 정부 발표에 맞춰 매년 갱신이 필요합니다.
+11. **공휴일은 자동으로 가져옵니다**(출처: 오픈소스 [holidays-kr](https://github.com/hyunbinseo/holidays-kr), 관보 기준·임시공휴일 포함).
+    앱이 보고 있는 해의 데이터를 받아 하루 동안 기기에 저장하고, 받지 못하면 앱에 포함된 사본(배포할 때 갱신)을 씁니다.
+    데이터가 아직 발표되지 않은 해(현재 2028년 이후)는 공휴일이 표시되지 않습니다. 정부 공식 API(공공데이터포털)는 인증키 신청이 필요해 쓰지 않았습니다.
 12. 손그림 선은 SVG 필터로 그리므로 아주 오래된 브라우저에서는 반듯한 선으로 보일 수 있습니다.
 13. 매월 31일 반복은 31일이 없는 달을 건너뛰고, 2월 29일 매년 반복(기념일)은 평년에 2월 28일로 표시됩니다.
 
