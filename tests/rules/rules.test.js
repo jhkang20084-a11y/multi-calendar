@@ -13,6 +13,8 @@ import { subscribe, unsubscribe, subscriptionId } from '../../src/services/subsc
 import { addTodo, toggleTodo } from '../../src/services/todos.js';
 import { ensureUserProfile } from '../../src/services/users.js';
 import { saveMemo } from '../../src/services/memos.js';
+import { createInviteLink, getInviteLink, joinWithLink, deleteInviteLink } from '../../src/services/inviteLinks.js';
+import { Timestamp } from 'firebase/firestore';
 
 const PROJECT = 'demo-multi-calendar';
 let env;
@@ -369,5 +371,60 @@ describe('이달의 메모', () => {
     await assertFails(saveMemo(dbOf('alice'), users.alice, calId, 'bad-id', 'x'));
     await changeMemberRole(dbOf('alice'), users.alice, calId, 'bob', 'editor');
     await assertSucceeds(saveMemo(dbOf('bob'), users.bob, calId, '2026-10', '편집자 수정'));
+  });
+});
+
+describe('링크 초대', () => {
+  it('소유자가 만든 링크로 정해진 역할로만 참여', async () => {
+    const a = dbOf('alice');
+    const calId = await createCalendar(a, users.alice, { name: '모임', shared: true });
+    const { linkId } = await createInviteLink(a, users.alice, await getCal(a, calId), 'viewer', 7);
+    // 링크 코드를 아는 사람은 링크 정보(캘린더 이름)를 읽을 수 있지만 캘린더 자체는 못 읽음
+    const link = await getInviteLink(dbOf('bob'), calId, linkId);
+    expect(link).toMatchObject({ role: 'viewer', calendarName: '모임' });
+    await assertFails(getDoc(doc(dbOf('bob'), 'calendars', calId)));
+    // 링크 목록은 소유자만
+    await assertFails(getDocs(collection(dbOf('bob'), 'calendars', calId, 'inviteLinks')));
+    // 열람자 링크로 편집자가 되려는 시도
+    await assertFails(joinWithLink(dbOf('bob'), users.bob, calId, linkId, 'editor'));
+    await assertSucceeds(joinWithLink(dbOf('bob'), users.bob, calId, linkId, 'viewer'));
+    expect((await getCal(dbOf('bob'), calId)).viewerIds).toEqual(['bob']);
+  });
+
+  it('없는 링크·취소된 링크·만료된 링크로는 참여 불가, 링크 없이 참여 불가', async () => {
+    const a = dbOf('alice');
+    const calId = await createCalendar(a, users.alice, { name: '모임', shared: true });
+    await assertFails(joinWithLink(dbOf('bob'), users.bob, calId, 'x'.repeat(32), 'viewer'));
+    const { linkId } = await createInviteLink(a, users.alice, await getCal(a, calId), 'editor', 1);
+    await deleteInviteLink(a, calId, linkId);
+    await assertFails(joinWithLink(dbOf('bob'), users.bob, calId, linkId, 'editor'));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'calendars', calId, 'inviteLinks', 'expired'.padEnd(32, 'x')), {
+        role: 'editor', calendarId: calId, calendarName: '모임', calendarColor: '#000',
+        createdBy: 'alice', createdByName: 'A', createdAt: Timestamp.now(), expiresAt: Timestamp.fromMillis(Date.now() - 1000),
+      });
+    });
+    await assertFails(joinWithLink(dbOf('carol'), users.carol, calId, 'expired'.padEnd(32, 'x'), 'editor'));
+    // joins 기록만 남기고 캘린더 추가 없이(또는 반대로) 시도
+    const { linkId: ok } = await createInviteLink(a, users.alice, await getCal(a, calId), 'editor', 7);
+    await assertFails(updateDoc(doc(dbOf('carol'), 'calendars', calId), {
+      memberIds: arrayUnion('carol'), editorIds: arrayUnion('carol'),
+      'memberInfo.carol': { name: 'C', email: 'carol@example.com', photoURL: '' },
+      updatedAt: serverTimestamp(), updatedBy: 'carol',
+    }));
+    await assertSucceeds(joinWithLink(dbOf('carol'), users.carol, calId, ok, 'editor'));
+  });
+
+  it('소유자가 아니면 링크를 만들 수 없고, 개인 캘린더는 링크 불가, 유효기간 최대 31일', async () => {
+    const calId = await sharedWithBob('editor');
+    await expect(createInviteLink(dbOf('bob'), users.bob, await getCal(dbOf('bob'), calId), 'editor', 7))
+      .rejects.toMatchObject({ code: 'permission-denied' });
+    const personal = await createCalendar(dbOf('alice'), users.alice, { name: '개인', shared: false });
+    await expect(createInviteLink(dbOf('alice'), users.alice, await getCal(dbOf('alice'), personal), 'viewer', 7))
+      .rejects.toMatchObject({ code: 'app/not-shared' });
+    await assertFails(setDoc(doc(dbOf('alice'), 'calendars', calId, 'inviteLinks', 'y'.repeat(32)), {
+      role: 'viewer', calendarId: calId, calendarName: '커플', calendarColor: '#000', createdBy: 'alice', createdByName: 'A',
+      createdAt: serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 90 * 86400e3),
+    }));
   });
 });

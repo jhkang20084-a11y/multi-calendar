@@ -18,6 +18,55 @@ import { listenMyCalendars, canEdit } from './services/calendars.js';
 import { listenMySubscriptions } from './services/subscriptions.js';
 import { listenMyInvitations } from './services/invitations.js';
 import { friendlyError } from './services/errors.js';
+import { parseJoinParam, getInviteLink, joinWithLink } from './services/inviteLinks.js';
+import { Modal } from './components/ui.jsx';
+import { ROLE_LABELS } from './services/calendars.js';
+
+// ── 초대 링크(?join=) : 로그인(리디렉션 포함)을 거쳐도 잊지 않도록 sessionStorage 에 보관 ──
+const JOIN_KEY = 'pendingJoin';
+(function captureJoinParam() {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  const join = parseJoinParam(params.get('join'));
+  if (!join) return;
+  try { sessionStorage.setItem(JOIN_KEY, JSON.stringify(join)); } catch { /* 저장소 사용 불가 */ }
+  params.delete('join');
+  const rest = params.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
+  window.__pendingJoin = join;
+}());
+function readPendingJoin() {
+  try { return JSON.parse(sessionStorage.getItem(JOIN_KEY)) || window.__pendingJoin || null; } catch { return window.__pendingJoin || null; }
+}
+function clearPendingJoin() {
+  try { sessionStorage.removeItem(JOIN_KEY); } catch { /* 무시 */ }
+  window.__pendingJoin = null;
+}
+
+function JoinDialog({ user, link, onJoined, onClose }) {
+  const { write } = useUi();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal title="캘린더 초대" onClose={onClose} small>
+      <div className="join-card">
+        <Hearts />
+        <p className="muted">{link.createdByName}님이 초대했어요</p>
+        <div className="join-name">{link.calendarName}</div>
+        <p><span className="dot" style={{ background: link.calendarColor }} /> {ROLE_LABELS[link.role]}로 참여합니다
+          <br /><span className="muted small">{link.role === 'editor' ? '일정을 보고, 추가·수정할 수 있어요.' : '일정을 볼 수 있어요.'}</span></p>
+        <div className="btn-col" style={{ width: '100%' }}>
+          <button className="btn btn-primary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            const r = await write(joinWithLink(db, user, link.calendarId, link.id, link.role), `${link.calendarName}에 참여했습니다.`);
+            setBusy(false);
+            if (r !== 'error') onJoined(link.calendarId);
+          }}>{busy ? '참여하는 중…' : '참여하기'}</button>
+          <button className="btn" onClick={onClose}>다음에</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 import { resolveFeedSources, buildInstances } from './lib/feed.js';
 import { viewRange, todayISO, safeZone, addDays, dateToDT } from './lib/time.js';
 
@@ -68,6 +117,7 @@ function Login({ error }) {
         <div className="login-year">{new Date().getFullYear()}</div>
         <Hearts />
         <h1 className="login-title">Calendar</h1>
+        {readPendingJoin() && <p className="hint">💌 캘린더 초대를 받았어요! 로그인하면 바로 참여할 수 있어요.</p>}
         <hr className="login-rule" />
         <p className="login-sub">우리의 하루를 함께 적는 작은 종이 달력.<br />나만의 달력부터 연인·가족·친구와 함께 쓰는 달력까지.</p>
         <button className="btn btn-google" disabled={busy} onClick={async () => {
@@ -157,11 +207,35 @@ function Main({ user }) {
   const [listTo, setListTo] = useState(() => addDays(todayISO(tz), 30));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dialog, setDialog] = useState(null); // {type, ...}
+  const [pendingFocus, setPendingFocus] = useState(null);
 
   // 표시 중이던 캘린더에 접근할 수 없게 되면 통합 보기로
   useEffect(() => {
+    if (calendars && pendingFocus && calendars.some((c) => c.id === pendingFocus)) {
+      setFocus(pendingFocus);
+      setPendingFocus(null);
+      return;
+    }
     if (calendars && focus !== 'all' && !calendars.some((c) => c.id === focus)) setFocus('all');
-  }, [calendars, focus]);
+  }, [calendars, focus, pendingFocus]);
+
+  // 초대 링크로 들어온 경우: 로그인 후 참여 화면 표시
+  const joinChecked = useRef(false);
+  useEffect(() => {
+    if (!calendars || joinChecked.current) return;
+    joinChecked.current = true;
+    const join = readPendingJoin();
+    if (!join) return;
+    if (calendars.some((c) => c.id === join.calId)) {
+      clearPendingJoin();
+      setFocus(join.calId);
+      toast('info', '이미 참여 중인 캘린더예요.');
+      return;
+    }
+    getInviteLink(db, join.calId, join.linkId)
+      .then((link) => setDialog({ type: 'join', link }))
+      .catch((e) => { clearPendingJoin(); toast('error', friendlyError(e), 6000); });
+  }, [calendars]);
 
   const hiddenIds = settings.hiddenCalendarIds || [];
   const toggleHidden = useCallback((id) => {
@@ -424,6 +498,11 @@ function Main({ user }) {
       {dialog?.type === 'calSettings' && (
         <CalendarSettingsDialog cal={calendarsById.get(dialog.calId)} user={user} calendars={calList}
           subscriptions={subscriptions} initialTab={dialog.tab} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.type === 'join' && (
+        <JoinDialog user={user} link={dialog.link}
+          onJoined={(calId) => { clearPendingJoin(); setPendingFocus(calId); setDialog(null); }}
+          onClose={() => { clearPendingJoin(); setDialog(null); }} />
       )}
       {dialog?.type === 'invites' && <InvitationsDialog user={user} invitations={invitations} error={invError} onClose={() => setDialog(null)} />}
       {dialog?.type === 'settings' && <SettingsDialog user={user} profile={{ ...profile, settings }} onClose={() => setDialog(null)} />}

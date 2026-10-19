@@ -11,6 +11,8 @@ rules_version = '2';
 //     memberInfo: { uid: {name, email, photoURL} }  (표시용)
 //   calendars/{calId}/invitations/{emailLower}      초대 (문서 ID = 소문자 이메일 → 중복 초대 방지)
 //   calendars/{calId}/memos/{YYYY-MM}               이달의 메모 (멤버 공유)
+//   calendars/{calId}/inviteLinks/{무작위코드}       링크 초대 (역할, 만료일)
+//   calendars/{calId}/joins/{uid}                   링크로 참여한 기록
 //   calendars/{calId}/events/{eventId}              원본 일정 (복제하지 않음)
 //   calendars/{calId}/events/{eventId}/todos/{id}   일정별 체크리스트
 //   calendars/{calId}/events/{eventId}/secret/detail  "시간만 공개" 일정의 세부 내용(작성자만)
@@ -138,24 +140,18 @@ service cloud.firestore {
           && me() in after.editorIds;
       }
 
-      // 4) 초대 수락: 같은 배치에서 초대 문서가 pending → accepted 로 바뀌어야 한다.
-      function selfJoin() {
+      // 나를 role 역할로 추가하는 변경인지 (다른 멤버/필드는 그대로)
+      function addsMeAs(role) {
         let before = resource.data;
         let after = request.resource.data;
-        let invPath = /databases/$(database)/documents/calendars/$(calId)/invitations/$(myEmail());
-        let inv = get(invPath).data;
-        let invAfter = getAfter(invPath).data;
         let infoDiff = after.memberInfo.diff(before.memberInfo);
-        return signedIn() && emailVerified()
-          && !(me() in before.memberIds)
+        return !(me() in before.memberIds)
           && before.shared == true
-          && inv.status == 'pending'
-          && invAfter.status == 'accepted'
-          && invAfter.respondedBy == me()
+          && role in ['editor', 'viewer']
           && changed().hasOnly(['editorIds', 'viewerIds', 'memberIds', 'memberInfo',
                                 'updatedAt', 'updatedBy'])
           && after.memberIds.toSet() == before.memberIds.toSet().union([me()].toSet())
-          && (inv.role == 'editor'
+          && (role == 'editor'
                 ? (after.editorIds.toSet() == before.editorIds.toSet().union([me()].toSet())
                    && after.viewerIds.toSet() == before.viewerIds.toSet())
                 : (after.viewerIds.toSet() == before.viewerIds.toSet().union([me()].toSet())
@@ -164,6 +160,29 @@ service cloud.firestore {
           && infoDiff.changedKeys().size() == 0
           && infoDiff.removedKeys().size() == 0
           && after.memberInfo[me()].email.lower() == myEmail();
+      }
+
+      // 4) 이메일 초대 수락: 같은 배치에서 초대 문서가 pending → accepted 로 바뀌어야 한다.
+      function selfJoin() {
+        let invPath = /databases/$(database)/documents/calendars/$(calId)/invitations/$(myEmail());
+        let inv = get(invPath).data;
+        let invAfter = getAfter(invPath).data;
+        return signedIn() && emailVerified()
+          && inv.status == 'pending'
+          && invAfter.status == 'accepted'
+          && invAfter.respondedBy == me()
+          && addsMeAs(inv.role);
+      }
+
+      // 4-2) 초대 링크로 참여: 같은 배치에서 joins/{내 uid} 에 유효한 링크 ID 를 기록해야 한다.
+      //      링크의 역할로만 들어올 수 있고, 만료되거나 소유자가 지운 링크는 쓸 수 없다.
+      function linkJoin() {
+        let join = getAfter(/databases/$(database)/documents/calendars/$(calId)/joins/$(me())).data;
+        let link = get(/databases/$(database)/documents/calendars/$(calId)/inviteLinks/$(join.linkId)).data;
+        return signedIn()
+          && join.joinedAt == request.time
+          && link.expiresAt > request.time
+          && addsMeAs(link.role);
       }
 
       // 5) 소유자가 아닌 멤버의 캘린더 나가기
@@ -208,7 +227,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && stamped()
         && (ownerSettingsUpdate() || ownerMembershipUpdate() || ownerTransfer()
-            || selfJoin() || selfLeave() || selfInfoUpdate());
+            || selfJoin() || linkJoin() || selfLeave() || selfInfoUpdate());
 
       allow delete: if isOwnerOf(resource.data);
 
@@ -274,6 +293,46 @@ service cloud.firestore {
           );
 
         allow delete: if isOwnerOf(calData(calId));
+      }
+
+      // ── inviteLinks: 링크 초대 (문서 ID = 추측할 수 없는 무작위 코드) ─────────────
+      // 코드를 아는 사람만 한 건씩 읽을 수 있다(목록 조회는 소유자만).
+      match /inviteLinks/{linkId} {
+        allow get: if signedIn();
+        allow list: if isOwnerOf(calData(calId));
+        allow create: if isOwnerOf(calData(calId))
+          && calData(calId).shared == true
+          && linkId.matches('^[A-Za-z0-9_-]{24,64}$')
+          && request.resource.data.keys().hasOnly(['role', 'calendarId', 'calendarName', 'calendarColor',
+                                                   'createdBy', 'createdByName', 'createdAt', 'expiresAt'])
+          && request.resource.data.role in ['editor', 'viewer']
+          && request.resource.data.calendarId == calId
+          && isStr(request.resource.data.calendarName, 60)
+          && isStr(request.resource.data.calendarColor, 20)
+          && isStr(request.resource.data.createdByName, 100)
+          && request.resource.data.createdBy == me()
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.expiresAt is timestamp
+          && request.resource.data.expiresAt > request.time
+          && request.resource.data.expiresAt <= request.time + duration.value(31, 'd');
+        allow update: if false;
+        allow delete: if isOwnerOf(calData(calId));
+      }
+
+      // ── joins: 링크로 참여한 기록 (문서 ID = 참여한 사람 uid) ─────────────────
+      match /joins/{uid} {
+        function validJoin() {
+          let link = get(/databases/$(database)/documents/calendars/$(calId)/inviteLinks/$(request.resource.data.linkId)).data;
+          return signedIn() && me() == uid
+            && request.resource.data.keys().hasOnly(['linkId', 'joinedAt'])
+            && request.resource.data.linkId is string
+            && request.resource.data.joinedAt == request.time
+            && link.expiresAt > request.time;
+        }
+        allow get: if signedIn() && (me() == uid || isOwnerOf(calData(calId)));
+        allow list: if isOwnerOf(calData(calId));
+        allow create, update: if validJoin();
+        allow delete: if signedIn() && (me() == uid || isOwnerOf(calData(calId)));
       }
 
       // ── memos: 이달의 메모 (문서 ID = 'YYYY-MM') ────────────────────────────

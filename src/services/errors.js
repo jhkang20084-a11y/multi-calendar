@@ -26,6 +26,8 @@ export function friendlyError(e) {
     'app/already-subscribed': '이미 구독 중인 캘린더입니다.',
     'app/self-subscribe': '같은 캘린더는 구독할 수 없습니다.',
     'app/no-access': '해당 캘린더에 접근 권한이 없습니다.',
+    'app/link-invalid': '초대 링크가 올바르지 않거나 취소되었습니다. 초대한 사람에게 새 링크를 받아 주세요.',
+    'app/link-expired': '초대 링크의 유효 기간이 지났습니다. 초대한 사람에게 새 링크를 받아 주세요.',
     'app/has-members': '다른 멤버가 있는 캘린더는 개인 캘린더로 바꿀 수 없습니다.',
   };
   const text = map[code] || e?.message || '알 수 없는 오류가 발생했습니다.';

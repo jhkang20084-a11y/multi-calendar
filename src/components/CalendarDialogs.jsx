@@ -11,6 +11,7 @@ import {
   acceptInvitation, declineInvitation,
 } from '../services/invitations.js';
 import { subscribe, unsubscribe, setSubscriptionActive } from '../services/subscriptions.js';
+import { createInviteLink, listenInviteLinks, deleteInviteLink, inviteUrl, LINK_DAYS } from '../services/inviteLinks.js';
 import { subscriptionStatus } from '../lib/feed.js';
 import { friendlyError } from '../services/errors.js';
 
@@ -165,6 +166,72 @@ function MembersTab({ cal, user }) {
   );
 }
 
+/** 링크 공유: 휴대폰은 공유 시트(카카오톡 등), 그 외에는 클립보드 복사 */
+async function shareLink(url, calName, toast) {
+  const text = `"${calName}" 캘린더에 초대합니다. 링크를 눌러 Google 계정으로 로그인하면 바로 참여할 수 있어요.`;
+  if (navigator.share) {
+    try { await navigator.share({ title: `${calName} 캘린더 초대`, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('success', '링크를 복사했습니다. 카카오톡 등에 붙여 넣어 보내세요.');
+  } catch {
+    window.prompt('아래 링크를 복사하세요', url);
+  }
+}
+
+function InviteLinkSection({ cal, user }) {
+  const { write, toast, confirm } = useUi();
+  const [links, setLinks] = useState(null);
+  const [role, setRole] = useState('editor');
+  const [days, setDays] = useState(7);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => listenInviteLinks(db, cal.id, setLinks, () => setLinks([])), [cal.id]);
+  const now = Date.now();
+  const active = (links || []).filter((l) => l.expiresAt?.toMillis?.() > now)
+    .sort((a, b) => b.expiresAt.toMillis() - a.expiresAt.toMillis());
+  return (
+    <section className="link-invite">
+      <div className="note-head"><h2>링크로 초대</h2><span className="note-date">이메일 없이 링크만 보내면 돼요</span></div>
+      <div className="invite-form">
+        <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="링크 역할">
+          <option value="editor">편집자로 초대</option>
+          <option value="viewer">열람자로 초대</option>
+        </select>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="유효 기간">
+          {LINK_DAYS.map((d) => <option key={d} value={d}>{d}일 동안 유효</option>)}
+        </select>
+        <button type="button" className="btn btn-primary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          let url = null;
+          const op = createInviteLink(db, user, cal, role, days).then((r) => { url = r.url; });
+          const r = await write(op, '초대 링크를 만들었습니다.');
+          setBusy(false);
+          if (r === 'ok' && url) shareLink(url, cal.name, toast);
+        }}>{busy ? '만드는 중…' : '링크 만들고 보내기'}</button>
+      </div>
+      <p className="hint">링크를 받은 사람은 눌러서 Google 계정으로 로그인하면 바로 참여합니다. 링크를 가진 누구나 들어올 수 있으니 필요한 사람에게만 보내고, 다 쓰면 취소하세요.</p>
+      {active.length > 0 && (
+        <ul className="invite-list">
+          {active.map((l) => (
+            <li key={l.id}>
+              <span className="member-main">
+                <b>🔗 {ROLE_LABELS[l.role]} 링크</b>
+                <span className="muted small">{l.expiresAt.toDate().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}까지 유효</span>
+              </span>
+              <button className="btn btn-small" onClick={() => shareLink(inviteUrl(cal.id, l.id), cal.name, toast)}>보내기</button>
+              <button className="btn btn-small btn-danger" onClick={async () => {
+                const ok = await confirm({ title: '링크 취소', message: '이 링크로는 더 이상 참여할 수 없게 됩니다. 이미 참여한 사람은 그대로입니다.', okLabel: '취소하기', danger: true });
+                if (ok) write(deleteInviteLink(db, cal.id, l.id), '링크를 취소했습니다.');
+              }}>취소</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function InvitesTab({ cal, user }) {
   const { write } = useUi();
   const [invites, setInvites] = useState(null);
@@ -180,7 +247,9 @@ function InvitesTab({ cal, user }) {
   if (!cal.shared) return <p className="hint">개인 캘린더입니다. "정보" 탭에서 공유 캘린더로 바꾸면 다른 사람을 초대할 수 있습니다.</p>;
   return (
     <div>
-      <form className="invite-form" onSubmit={async (e) => {
+      <InviteLinkSection cal={cal} user={user} />
+      <div className="note-head" style={{ marginTop: 22 }}><h2>이메일로 초대</h2><span className="note-date">특정 Google 계정만</span></div>
+      <form className="invite-form" style={{ marginTop: 10 }} onSubmit={async (e) => {
         e.preventDefault();
         const op = inviteMember(db, user, cal, email, role);
         if (await write(op, `${email.trim()}님을 초대했습니다.`) !== 'error') setEmail('');

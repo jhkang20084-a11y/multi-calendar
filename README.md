@@ -115,6 +115,7 @@ npm run deploy
 | `npm run test:rules` | 보안 규칙 (19개, 이달의 메모 포함): 소유자 위조, 초대 우회, 열람자 수정, 비공개 일정, 구독 우회 등 | Java |
 | `npm run test:integration` | 두 사용자 실시간 동기화 (8개, 지시서 17장 시나리오) | Java |
 | `npm test` | 위 전부 | Java |
+| `node tests/e2e/invite-link.mjs` | 링크 초대 E2E: 링크 생성 → 새 사용자 로그인·참여 → 취소된 링크 차단 | 위와 동일 |
 | `node tests/e2e/ui-smoke.mjs` | 실제 브라우저(PC 화면 A + iPhone 13 화면 B) 16단계 UI 테스트(메모 공유·날짜 선택 포함), 스크린샷은 `test-results/` | `npm run emulators` + `npm run dev:emu` 실행 중, Chromium |
 
 필수 시나리오 ↔ 테스트 위치
@@ -146,6 +147,8 @@ calendars/{calendarId}                        이름, 설명, 색, 커버, share
     memberInfo{uid: {name,email,photoURL}}    표시용 멤버 정보
     createdBy, createdAt, updatedAt, updatedBy
   /memos/{YYYY-MM}                            이달의 메모: text, updatedBy, updatedAt (멤버 읽기, 편집자 쓰기)
+  /inviteLinks/{무작위코드}                    링크 초대: role, expiresAt (코드를 아는 사람만 1건 조회)
+  /joins/{uid}                                링크로 참여한 기록 (linkId, joinedAt)
   /invitations/{소문자이메일}                 role, status(pending/accepted/declined/canceled), 초대자
   /events/{eventId}                           원본 일정 (구독용 복제 없음)
       calendarId, title, description, location, notes, color, category,
@@ -187,7 +190,7 @@ subscriptions/{uid__대상ID__원본ID}           ownerUid, targetCalendarId, so
 ## 8. 주요 기능
 - Google 로그인/로그아웃, 로그인 유지, 최초 로그인 시 프로필 + "내 캘린더" 자동 생성
 - 캘린더 여러 개 생성(개인/공유), 색상·설명·커버 이미지(기본 그라디언트 또는 사진 업로드)
-- 이메일 초대, 수락/거절, 초대 취소·재발송, 초대 상태 표시, 이미 멤버/중복 초대 처리, 역할 변경, 멤버 제거, 나가기, 소유권 이전, 캘린더 삭제
+- **링크 초대**(역할·유효기간 1/7/30일, 휴대폰 공유 시트로 카톡 등에 전송, 언제든 취소), 이메일 초대, 수락/거절, 초대 취소·재발송, 초대 상태 표시, 이미 멤버/중복 초대 처리, 역할 변경, 멤버 제거, 나가기, 소유권 이전, 캘린더 삭제
 - 일정: 생성/수정/삭제, 종일·여러 날, 시간대, 반복(매일/매주 요일/매월/매년, 간격, 종료일·횟수),
   반복 회차 수정·삭제("이 일정만 / 이 일정 및 이후 / 모든 반복"), 장소·설명·메모·색상·분류, 완료 표시, 작성자/수정자 기록
 - 체크리스트: 추가·완료·수정·삭제·담당자, 실시간 공유

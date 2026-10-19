@@ -162,8 +162,10 @@ export async function deleteCalendar(db, user, calId) {
     if (ev.visibility === 'busy') refs.push(doc(e.ref, 'secret', 'detail'));
     refs.push(e.ref);
   }
-  const invs = await getDocs(collection(calRef, 'invitations'));
-  invs.forEach((i) => refs.push(i.ref));
+  for (const sub of ['invitations', 'inviteLinks', 'joins']) {
+    const snap = await getDocs(collection(calRef, sub));
+    snap.forEach((d) => refs.push(d.ref));
+  }
   for (let i = 0; i < refs.length; i += 400) {
     const b = writeBatch(db);
     refs.slice(i, i + 400).forEach((r) => b.delete(r));
