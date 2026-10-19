@@ -467,10 +467,12 @@ service cloud.firestore {
     // 원본 일정 읽기 권한을 부여하지 않는다(일정 읽기는 events 규칙에서 원본 멤버십을 다시 검사).
     match /subscriptions/{subId} {
       function validSub(d) {
-        return d.keys().hasOnly(['ownerUid', 'targetCalendarId', 'sourceCalendarId', 'active',
+        return d.keys().hasOnly(['ownerUid', 'targetCalendarId', 'sourceCalendarId', 'active', 'color',
                                  'createdAt', 'updatedAt'])
           && d.ownerUid is string && d.targetCalendarId is string && d.sourceCalendarId is string
-          && d.active is bool;
+          && d.active is bool
+          // 구독한 캘린더 일정을 보여 줄 색 (구독한 사람이 고름)
+          && (!('color' in d) || isStr(d.color, 20));
       }
       // 존재하지 않는 문서 조회(중복 구독 확인용)는 허용한다. 내용은 없으므로 노출되는 정보가 없다.
       allow get: if signedIn() && (resource == null || resource.data.ownerUid == me());
@@ -489,7 +491,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow update: if signedIn() && resource.data.ownerUid == me()
         && validSub(request.resource.data)
-        && changed().hasOnly(['active', 'updatedAt'])
+        && changed().hasOnly(['active', 'color', 'updatedAt'])
         && request.resource.data.updatedAt == request.time
         && (request.resource.data.active == false
             || isMemberOf(calData(resource.data.sourceCalendarId)));

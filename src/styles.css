@@ -499,3 +499,27 @@ code { background: var(--sheet-2); padding: 1px 5px; border-radius: 4px; }
 .swipe-pager { overflow: hidden; touch-action: pan-y; margin: 0 -16px; padding: 0 16px; }
 .swipe-track { will-change: transform; }
 @media (max-width: 420px) { .swipe-pager { margin: 0 -10px; padding: 0 10px; } }
+
+/* ── 형광펜: 일정을 분류 색으로 반투명하게 칠한다 ───────────────────────────── */
+.chip.bar, .chip.bar.chip-timed, .chip.bar.chip-allday {
+  background: transparent; border-left: 0; isolation: isolate; color: var(--ink);
+}
+.chip.bar::before {
+  content: ""; position: absolute; z-index: -1; inset: 1px -1px 0;
+  background: color-mix(in srgb, var(--c) 45%, transparent);
+  border-radius: 3px 7px 4px 8px / 7px 3px 8px 4px;
+  transform: skewX(-8deg);
+}
+.chip.bar.cont-left::before { border-top-left-radius: 0; border-bottom-left-radius: 0; transform: none; left: 0; }
+.chip.bar.cont-right::before { border-top-right-radius: 0; border-bottom-right-radius: 0; transform: none; right: 0; }
+.chip.bar.chip-done::before { opacity: .45; }
+.chip.bar.chip-busy::before { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--c) 40%, transparent) 0 5px, color-mix(in srgb, var(--c) 18%, transparent) 5px 10px); }
+.tevent { border-left: 0; background: color-mix(in srgb, var(--c) 40%, var(--paper)); border-radius: 3px 7px 4px 8px; }
+/* 목록·Schedule: 제목에 형광펜 밑줄 */
+.ruled-item .title, .list-item .list-title {
+  background: linear-gradient(transparent 52%, color-mix(in srgb, var(--c) 45%, transparent) 52%, color-mix(in srgb, var(--c) 45%, transparent) 92%, transparent 92%);
+  padding: 0 2px;
+}
+
+.modal-foot .footer-left { margin-right: auto; }
+.modal-foot .footer-left + .form-error { margin-right: 0; }

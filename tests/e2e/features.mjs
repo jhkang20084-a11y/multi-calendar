@@ -78,14 +78,23 @@ try {
   await p.locator('.toast-success', { hasText: '일정을 추가했습니다' }).waitFor();
   await p.locator('.modal').waitFor({ state: 'detached' });
   const chip = p.locator('.chip', { hasText: '치과 검진' }).first();
-  const color = await chip.evaluate((el) => getComputedStyle(el).borderLeftColor);
-  if (color !== rgb('#e4513a')) throw new Error(`병원 분류 색이 아님: ${color}`);
+  const color = await chip.evaluate((el) => el.style.getPropertyValue('--c'));
+  if (color !== '#e4513a') throw new Error(`병원 분류 색이 아님: ${color}`);
+  const marker = await chip.evaluate((el) => getComputedStyle(el, '::before').backgroundColor);
+  if (!marker || marker === 'rgba(0, 0, 0, 0)') throw new Error('형광펜 배경이 없음');
 
-  step('상세: 할 일 2개, 네이버 지도 링크');
+  step('일정을 누르면 바로 수정 화면: 할 일 2개, 네이버 지도 링크, 삭제 버튼');
   await chip.click();
+  await p.locator('.modal', { hasText: '일정 수정' }).waitFor();
   await p.locator('.todos li', { hasText: '보험증 챙기기' }).waitFor();
   await p.locator('.todos li', { hasText: '치실 사기' }).waitFor();
-  await p.locator('.detail a.map-link', { hasText: '강남역 치과' }).waitFor();
+  await p.locator('.modal a.map-link', { hasText: '강남역 치과' }).waitFor();
+  await p.getByRole('button', { name: '삭제', exact: true }).waitFor();
+  // 수정 화면의 할 일 추가가 일정 저장으로 이어지지 않는지
+  await p.getByPlaceholder('할 일 추가').fill('예약 확인 전화');
+  await p.locator('.todo-add').getByRole('button', { name: '추가' }).click();
+  await p.locator('.todos li', { hasText: '예약 확인 전화' }).waitFor();
+  if (!(await p.locator('.modal', { hasText: '일정 수정' }).count())) throw new Error('할 일 추가 후 수정 화면이 닫힘');
   await p.screenshot({ path: 'test-results/feat-1-detail.png' });
   await p.getByRole('button', { name: '닫기' }).click();
 
@@ -132,7 +141,7 @@ try {
   }, null, { timeout: 10000 });
   await p.screenshot({ path: 'test-results/feat-2-month.png', fullPage: true });
 
-  step('구독 일정은 분류와 상관없이 원본 캘린더 색, 이모티콘 없음');
+  step('구독할 때 고른 색으로 구독 일정 표시(분류와 상관없이), 이모티콘 없음');
   await p.locator('.menu-btn').click();
   await p.getByRole('button', { name: '새 캘린더' }).click();
   await p.getByPlaceholder(/커플 캘린더/).fill('우리 둘');
@@ -141,13 +150,14 @@ try {
   await p.getByRole('button', { name: '캘린더 설정', exact: true }).click();
   await p.getByRole('tab', { name: '구독' }).click();
   await p.getByRole('combobox', { name: '구독할 캘린더' }).selectOption({ label: '내 캘린더' });
+  await p.locator('.invite-form .color-picker .swatch').nth(4).click(); // 구독 색: 머스터드 #d9b44a
   await p.locator('.invite-form').getByRole('button', { name: '구독' }).click();
   await p.locator('.toast-success', { hasText: '구독을 시작했습니다' }).waitFor();
   await p.getByRole('button', { name: '닫기' }).click();
   const sub = p.locator('.ruled-item', { hasText: '치과 검진' }).first();
   await sub.waitFor({ timeout: 10000 });
   const subColor = await sub.locator('.bar').evaluate((el) => getComputedStyle(el).backgroundColor);
-  if (subColor !== rgb('#6f95c4')) throw new Error(`구독 일정이 원본 캘린더 색(#6f95c4)이 아님: ${subColor}`);
+  if (subColor !== rgb('#d9b44a')) throw new Error(`구독 일정이 구독할 때 고른 색(#d9b44a)이 아님: ${subColor}`);
   if ((await sub.textContent()).includes('🔗')) throw new Error('구독 이모티콘이 남아 있음');
   if (await p.getByRole('button', { name: '구독 관리' }).count()) throw new Error('달력 화면에 구독 관리 버튼이 남아 있음');
   await p.screenshot({ path: 'test-results/feat-3-subscribed.png' });

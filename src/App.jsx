@@ -16,6 +16,7 @@ import { NewCalendarDialog, CalendarSettingsDialog, InvitationsDialog } from './
 import { Sidebar, SyncBadge, SettingsDialog, useDdayItems } from './components/Shell.jsx';
 import { listenProfile, updateSettings, DEFAULT_SETTINGS } from './services/users.js';
 import { listenMyCalendars, canEdit } from './services/calendars.js';
+import { getSecret } from './services/events.js';
 import { listenMySubscriptions } from './services/subscriptions.js';
 import { listenMyInvitations } from './services/invitations.js';
 import { friendlyError } from './services/errors.js';
@@ -344,6 +345,17 @@ function Main({ user }) {
     });
   }
 
+  // 일정을 누르면: 고칠 수 있으면 바로 수정 화면, 아니면(열람자·남의 시간만 공개 일정) 보기 화면
+  async function openInstance(inst) {
+    const cal = calendarsById.get(inst.calendarId);
+    const mine = inst.ev.createdBy === user.uid;
+    const editable = canEdit(cal, user.uid) && (inst.ev.visibility === 'members' || mine);
+    if (!editable) { setDialog({ type: 'detail', inst }); return; }
+    let secret = null;
+    if (inst.ev.visibility === 'busy' && mine) secret = await getSecret(db, inst.calendarId, inst.eventId).catch(() => null);
+    openEdit(inst, secret);
+  }
+
   const focusedCal = calendarsById.get(focus);
   const emptyText = search ? `"${search}"에 맞는 일정이 이 기간에 없습니다.` : '이 기간에 일정이 없습니다.';
 
@@ -450,27 +462,27 @@ function Main({ user }) {
               <SwipePager onMove={move}>
                 <MonthView range={range} anchorDate={anchor} instances={instances} today={today} tz={tz} weekStartsOn={settings.weekStartsOn}
                   selectedDate={selectedDate} sketch={settings.gridStyle === 'sketch'}
-                  onOpen={(inst) => setDialog({ type: 'detail', inst })}
+                  onOpen={openInstance}
                   onSelectDate={(d) => { setSelectedDate(d); openCreate(d); }}
                   onCreateAt={(d) => openCreate(d)} />
               </SwipePager>
               <div className="notes-grid">
                 <DayNotes date={selectedDate} instances={instances} tz={tz}
-                  onOpen={(inst) => setDialog({ type: 'detail', inst })} onCreate={(d) => openCreate(d)} />
+                  onOpen={openInstance} onCreate={(d) => openCreate(d)} />
                 <MonthMemo user={user} calendar={focusedCal || null} month={anchor.slice(0, 7)} />
               </div>
             </>
           ) : currentView === 'list' ? (
             <SwipePager onMove={move}>
               <ListView instances={instances} range={range} today={today} tz={tz} emptyText={emptyText}
-                onOpen={(inst) => setDialog({ type: 'detail', inst })} />
+                onOpen={openInstance} />
             </SwipePager>
           ) : (
             <SwipePager onMove={move}>
               <TimeGridView
                 days={Array.from({ length: currentView === 'week' ? 7 : 1 }, (_, i) => addDays(range.startDate, i))}
                 instances={instances} today={today} tz={tz}
-                onOpen={(inst) => setDialog({ type: 'detail', inst })}
+                onOpen={openInstance}
                 onCreateAt={(d, h) => openCreate(d, h)} />
             </SwipePager>
           )}

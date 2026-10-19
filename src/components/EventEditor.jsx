@@ -5,6 +5,7 @@ import { msToLocalInput, localInputToMs, safeZone, addDays, daysBetween } from '
 import { VISIBILITY_LABELS, createEvent, updateEvent, saveRecurringOccurrence, addTodos } from '../services/events.js';
 import { categoriesOf } from '../lib/categories.js';
 import { naverMapUrl } from '../lib/maps.js';
+import { TodoList, deleteWithConfirm } from './EventDetail.jsx';
 import { db } from '../firebase.js';
 
 const WEEKDAY_OPTS = [[1, '월'], [2, '화'], [3, '수'], [4, '목'], [5, '금'], [6, '토'], [7, '일']];
@@ -166,6 +167,15 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
     <Modal title={isEdit ? '일정 수정' : '새 일정'} onClose={onClose} wide
       footer={(
         <>
+          {isEdit && (
+            <button type="button" className="btn btn-danger footer-left" onClick={async () => {
+              const ok = await deleteWithConfirm({
+                confirm, write, user, ev: existing.ev, title: form.title || existing.ev.title,
+                inst: { calendarId: existing.calendarId, eventId: existing.eventId, occKey: existing.occKey },
+              });
+              if (ok) onClose();
+            }}>삭제</button>
+          )}
           {error && <span className="form-error" role="alert">{error}</span>}
           <button type="button" className="btn" onClick={onClose}>취소</button>
           <button type="submit" form="event-form" className="btn btn-primary" disabled={saving}>{saving ? '저장 중…' : '저장'}</button>
@@ -289,7 +299,8 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
         <label className="field"><span>설명</span><textarea rows={3} value={form.description} onChange={set('description')} maxLength={5000} /></label>
         <label className="field"><span>메모</span><textarea rows={3} value={form.notes} onChange={set('notes')} maxLength={10000} placeholder="함께 볼 메모" /></label>
 
-        <div className="field"><span>할 일{isEdit ? ' 추가' : ''}</span>
+        {!isEdit && (
+        <div className="field"><span>할 일</span>
           {todos.length > 0 && (
             <ul className="todo-draft">
               {todos.map((t, i) => (
@@ -304,8 +315,17 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
               aria-label="할 일 입력" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTodoLine(); } }} />
             <button type="button" className="btn btn-small" onClick={addTodoLine}>추가</button>
           </div>
-          {isEdit && <small>이미 있는 할 일은 일정 상세에서 체크하거나 고칠 수 있어요.</small>}
         </div>
+        )}
+        {isEdit && (
+          <label className="check"><input type="checkbox" checked={form.completed} onChange={set('completed')} /> 완료한 일정</label>
+        )}
+        {isEdit && (
+          <p className="muted small">
+            작성: {calendar?.memberInfo?.[existing.ev.createdBy]?.name || '이전 멤버'}
+            {existing.ev.updatedBy ? ` · 마지막 수정: ${calendar?.memberInfo?.[existing.ev.updatedBy]?.name || '이전 멤버'}` : ''}
+          </p>
+        )}
 
         <label className="field"><span>공개 범위</span>
           <select value={form.visibility} onChange={set('visibility')}
@@ -328,6 +348,13 @@ export function EventEditor({ mode, user, editableCalendars, existing, defaults,
           {!anniversary && <label className="check"><input type="checkbox" checked={form.showDday} onChange={set('showDday')} /> D-day 표시</label>}
         </div>
       </form>
+      {/* 체크리스트는 따로 저장되므로 일정 입력 form 밖에 둔다(안에 두면 할 일 추가가 일정 저장으로 이어짐) */}
+      {isEdit && (
+        <div style={{ marginTop: 16 }}>
+          <TodoList user={user} calId={existing.calendarId} eventId={existing.eventId}
+            members={calendar?.memberInfo || {}} editable />
+        </div>
+      )}
     </Modal>
   );
 }

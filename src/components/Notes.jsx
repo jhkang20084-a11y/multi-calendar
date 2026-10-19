@@ -24,7 +24,7 @@ export function DayNotes({ date, instances, tz, onOpen, onCreate }) {
       <ul className="ruled">
         {list.map((inst) => (
           <li key={inst.key}>
-            <button type="button" className={`ruled-item ${inst.ev.completed ? 'chip-done' : ''}`} onClick={() => onOpen(inst)}>
+            <button type="button" className={`ruled-item ${inst.ev.completed ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
               <span className="time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
               <span className="bar" style={{ background: inst.color }} />
               <span className="main">

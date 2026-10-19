@@ -10,7 +10,7 @@ import {
   inviteMember, cancelInvitation, deleteInvitation, listenCalendarInvitations, INVITE_STATUS_LABELS,
   acceptInvitation, declineInvitation,
 } from '../services/invitations.js';
-import { subscribe, unsubscribe, setSubscriptionActive } from '../services/subscriptions.js';
+import { subscribe, unsubscribe, setSubscriptionActive, setSubscriptionColor } from '../services/subscriptions.js';
 import { createInviteLink, listenInviteLinks, deleteInviteLink, inviteUrl, LINK_DAYS } from '../services/inviteLinks.js';
 import { subscriptionStatus } from '../lib/feed.js';
 import { categoriesOf, MAX_CATEGORIES } from '../lib/categories.js';
@@ -289,20 +289,29 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
   const subscribed = new Set(mine.map((s) => s.sourceCalendarId));
   const options = calendars.filter((c) => c.id !== cal.id && !subscribed.has(c.id));
   const [source, setSource] = useState('');
+  const [color, setColor] = useState('');
+  const [editingColor, setEditingColor] = useState(null);
   const nameOf = (id) => calendars.find((c) => c.id === id)?.name;
+  const pick = (id) => { setSource(id); setColor(calendars.find((c) => c.id === id)?.color || PALETTE[0]); };
   return (
     <div>
-      <p className="hint">다른 캘린더의 일정을 이 캘린더 화면에서 함께 봅니다. 일정은 복사되지 않으며 원본이 바뀌면 바로 반영됩니다. 구독은 나에게만 보이고, 원본 캘린더 권한이 그대로 적용됩니다.</p>
+      <p className="hint">다른 캘린더의 일정을 이 캘린더 화면에서 함께 봅니다. 일정은 복사되지 않으며 원본이 바뀌면 바로 반영됩니다. 구독한 일정은 분류와 상관없이 고른 색으로 보이고, 왼쪽 동그라미를 누르면 색을 바꿀 수 있어요.</p>
       <form className="invite-form" onSubmit={async (e) => {
         e.preventDefault();
         if (!source) return;
-        if (await write(subscribe(db, user, cal.id, source, calendars), `"${nameOf(source)}" 구독을 시작했습니다.`) !== 'error') setSource('');
+        if (await write(subscribe(db, user, cal.id, source, calendars, color), `"${nameOf(source)}" 구독을 시작했습니다.`) !== 'error') setSource('');
       }}>
-        <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="구독할 캘린더">
+        <select value={source} onChange={(e) => pick(e.target.value)} aria-label="구독할 캘린더">
           <option value="">구독할 캘린더 선택</option>
           {options.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <button className="btn btn-primary" disabled={!source}>구독</button>
+        {source && (
+          <div className="field" style={{ width: '100%' }}>
+            <span>이 캘린더 일정을 보여 줄 색</span>
+            <ColorPicker value={color} onChange={setColor} palette={PALETTE} />
+          </div>
+        )}
       </form>
       {options.length === 0 && <p className="muted small">구독할 수 있는 다른 캘린더가 없습니다.</p>}
       <ul className="invite-list">
@@ -311,7 +320,8 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
           const src = calendars.find((c) => c.id === s.sourceCalendarId);
           return (
             <li key={s.id}>
-              <span className="dot" style={{ background: src?.color || '#999' }} />
+              <button type="button" className="swatch" style={{ background: s.color || src?.color || '#999' }}
+                aria-label={`${src?.name || ''} 구독 색 바꾸기`} onClick={() => setEditingColor(editingColor === s.id ? null : s.id)} />
               <span className="member-main"><b>{src?.name || '(접근할 수 없는 캘린더)'}</b>
                 <span className="muted small">{st === 'no-access' ? '원본 접근 권한이 없어 표시가 중단되었습니다' : st === 'paused' ? '일시 중지됨' : `내 역할: ${ROLE_LABELS[roleOf(src, user.uid)]}`}</span>
               </span>
@@ -321,6 +331,14 @@ function SubscriptionsTab({ cal, user, calendars, subscriptions }) {
                 </button>
               )}
               <button className="btn btn-small btn-danger" onClick={() => write(unsubscribe(db, s.id), '구독을 해제했습니다. 원본 일정은 그대로입니다.')}>구독 해제</button>
+              {editingColor === s.id && (
+                <div className="category-colors">
+                  <ColorPicker value={s.color || src?.color} palette={PALETTE} onChange={(c) => {
+                    setEditingColor(null);
+                    write(setSubscriptionColor(db, s.id, c), '구독 색을 바꿨습니다.');
+                  }} />
+                </div>
+              )}
             </li>
           );
         })}

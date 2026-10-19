@@ -21,7 +21,7 @@ function whenText(inst, tz) {
   return `${s} ~ ${e}`;
 }
 
-function TodoList({ user, calId, eventId, members, editable }) {
+export function TodoList({ user, calId, eventId, members, editable }) {
   const { write, toast } = useUi();
   const [todos, setTodos] = useState(null);
   const [error, setError] = useState('');
@@ -104,6 +104,31 @@ function TodoList({ user, calId, eventId, members, editable }) {
 /**
  * 일정 상세. 원본 문서를 실시간으로 다시 구독하므로, 열어 둔 동안 다른 멤버가 수정/삭제해도 바로 반영된다.
  */
+/**
+ * 일정 삭제(반복 일정이면 범위 선택). 삭제를 진행했으면 true.
+ */
+export async function deleteWithConfirm({ confirm, write, user, inst, ev, title }) {
+  let op;
+  if (ev.recurrence && inst.occKey) {
+    const scope = await confirm({
+      title: '반복 일정 삭제',
+      message: '어떤 일정을 삭제할까요? 모든 멤버의 화면에서 함께 사라집니다.',
+      choices: [
+        { value: 'this', label: '이 일정만', danger: true },
+        { value: 'following', label: '이 일정 및 이후 일정', danger: true },
+        { value: 'all', label: '모든 반복 일정', danger: true },
+      ],
+    });
+    if (!scope) return false;
+    op = deleteRecurringOccurrence(db, user, inst.calendarId, inst.eventId, ev, inst.occKey, scope);
+  } else {
+    const ok = await confirm({ title: '일정 삭제', message: `"${title}" 일정을 삭제할까요? 모든 멤버와 구독 화면에서 사라집니다.`, okLabel: '삭제', danger: true });
+    if (!ok) return false;
+    op = deleteEvent(db, user, inst.calendarId, inst.eventId, ev);
+  }
+  return (await write(op, '일정을 삭제했습니다.')) !== 'error';
+}
+
 export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onClose }) {
   const { write, confirm } = useUi();
   const [ev, setEv] = useState(inst.ev);
@@ -129,26 +154,7 @@ export function EventDetail({ inst, calendar, viaCalendar, user, tz, onEdit, onC
   const zone = safeZone(tz);
 
   async function onDelete() {
-    let op;
-    if (ev.recurrence && inst.occKey) {
-      const scope = await confirm({
-        title: '반복 일정 삭제',
-        message: '어떤 일정을 삭제할까요? 모든 멤버의 화면에서 함께 사라집니다.',
-        choices: [
-          { value: 'this', label: '이 일정만', danger: true },
-          { value: 'following', label: '이 일정 및 이후 일정', danger: true },
-          { value: 'all', label: '모든 반복 일정', danger: true },
-        ],
-      });
-      if (!scope) return;
-      op = deleteRecurringOccurrence(db, user, inst.calendarId, inst.eventId, ev, inst.occKey, scope);
-    } else {
-      const ok = await confirm({ title: '일정 삭제', message: `"${title}" 일정을 삭제할까요? 모든 멤버와 구독 화면에서 사라집니다.`, okLabel: '삭제', danger: true });
-      if (!ok) return;
-      op = deleteEvent(db, user, inst.calendarId, inst.eventId, ev);
-    }
-    const r = await write(op, '일정을 삭제했습니다.');
-    if (r !== 'error') onClose();
+    if (await deleteWithConfirm({ confirm, write, user, inst, ev, title })) onClose();
   }
 
   if (deleted) {

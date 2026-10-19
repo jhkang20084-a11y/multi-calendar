@@ -15,7 +15,7 @@ export function listenMySubscriptions(db, uid, cb, onError) {
  * target 캘린더 화면에 source 캘린더 일정을 읽기 전용으로 함께 표시한다.
  * 일정은 복사하지 않는다. 표시할 때마다 원본 캘린더 권한으로 다시 조회한다.
  */
-export async function subscribe(db, user, targetId, sourceId, myCalendars) {
+export async function subscribe(db, user, targetId, sourceId, myCalendars, color) {
   if (targetId === sourceId) throw appError('app/self-subscribe');
   const ids = new Set(myCalendars.map((c) => c.id));
   if (!ids.has(targetId) || !ids.has(sourceId)) throw appError('app/no-access');
@@ -27,6 +27,7 @@ export async function subscribe(db, user, targetId, sourceId, myCalendars) {
     targetCalendarId: targetId,
     sourceCalendarId: sourceId,
     active: true,
+    color: color || myCalendars.find((c) => c.id === sourceId)?.color || '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -40,4 +41,9 @@ export function setSubscriptionActive(db, subId, active) {
 /** 구독 해제: 구독 관계 문서만 지운다. 원본 일정은 그대로다. */
 export function unsubscribe(db, subId) {
   return deleteDoc(doc(db, 'subscriptions', subId));
+}
+
+/** 구독한 캘린더 일정의 표시 색 바꾸기 */
+export function setSubscriptionColor(db, subId, color) {
+  return updateDoc(doc(db, 'subscriptions', subId), { color, updatedAt: serverTimestamp() });
 }

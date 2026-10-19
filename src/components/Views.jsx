@@ -229,7 +229,7 @@ export function ListView({ instances, range, today, tz, onOpen, emptyText }) {
           <section key={d} className={`list-day ${d === today ? 'today' : ''}`}>
             <h3><span className="dlabel">{dt.toFormat('M월 d일 (ccc)')}</span>{holidayOf(d) && <span className="hname">{holidayOf(d)}</span>}{d === today && <span className="badge">오늘</span>}</h3>
             {byDate.get(d).map((inst) => (
-              <button type="button" key={inst.key} className={`list-item ${inst.ev.completed ? 'chip-done' : ''}`} onClick={() => onOpen(inst)}>
+              <button type="button" key={inst.key} className={`list-item ${inst.ev.completed ? 'chip-done' : ''}`} style={{ '--c': inst.color }} onClick={() => onOpen(inst)}>
                 <span className="list-color" style={{ background: inst.color }} />
                 <span className="list-time">{inst.allDay ? '종일' : `${formatTime(inst.startMs, tz)}–${formatTime(inst.endMs, tz)}`}</span>
                 <span className="list-main">

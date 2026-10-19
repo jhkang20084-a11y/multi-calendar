@@ -9,7 +9,7 @@ import {
 import { createCalendar, changeMemberRole, removeMember, transferOwnership, leaveCalendar, newCalendarDoc } from '../../src/services/calendars.js';
 import { inviteMember, acceptInvitation, declineInvitation, cancelInvitation } from '../../src/services/invitations.js';
 import { addTodos, createEvent, updateEvent, deleteEvent, listenEvents, getSecret } from '../../src/services/events.js';
-import { subscribe, unsubscribe, subscriptionId } from '../../src/services/subscriptions.js';
+import { subscribe, unsubscribe, subscriptionId, setSubscriptionColor } from '../../src/services/subscriptions.js';
 import { addTodo, toggleTodo } from '../../src/services/todos.js';
 import { ensureUserProfile } from '../../src/services/users.js';
 import { saveMemo } from '../../src/services/memos.js';
@@ -447,5 +447,18 @@ describe('분류와 일정+할 일 함께 만들기', () => {
     await assertSucceeds(updateDoc(doc(dbOf('alice'), 'calendars', calId), { categories: cats, updatedAt: serverTimestamp(), updatedBy: 'alice' }));
     const many = Array.from({ length: 21 }, (_, i) => ({ id: `c${i}`, name: `분류${i}`, color: '#000' }));
     await assertFails(updateDoc(doc(dbOf('alice'), 'calendars', calId), { categories: many, updatedAt: serverTimestamp(), updatedBy: 'alice' }));
+  });
+});
+
+describe('구독 색', () => {
+  it('구독한 사람만 색을 정하고 바꿀 수 있음', async () => {
+    const a = dbOf('alice');
+    const fam = await createCalendar(a, users.alice, { name: '가족' });
+    const mine = await createCalendar(a, users.alice, { name: '개인' });
+    const cals = [await getCal(a, fam), await getCal(a, mine)];
+    const id = await subscribe(a, users.alice, mine, fam, cals, '#e8a3a0');
+    expect((await getDoc(doc(a, 'subscriptions', id))).data().color).toBe('#e8a3a0');
+    await assertSucceeds(setSubscriptionColor(a, id, '#8fa876'));
+    await assertFails(setSubscriptionColor(dbOf('bob'), id, '#000000'));
   });
 });

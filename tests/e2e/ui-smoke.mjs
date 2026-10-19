@@ -85,14 +85,13 @@ try {
   await A.locator('.chip', { hasText: '저녁 데이트' }).first().click();
   await A.locator('.todos li.done', { hasText: '꽃 예약' }).waitFor({ timeout: 10000 });
 
-  step('5. B가 일정 제목 수정 → A의 열린 상세 화면에 반영');
-  await B.getByRole('button', { name: '수정', exact: true }).click();
+  step('5. 일정을 누르면 바로 수정 화면 → B가 제목 수정 → A 화면에 반영');
+  await A.getByRole('button', { name: '닫기' }).click();
   await B.getByPlaceholder('일정 제목').fill('저녁 데이트 (7시 반)');
   await B.getByRole('button', { name: '저장' }).click();
   await B.locator('.toast-success', { hasText: '일정을 수정했습니다' }).waitFor();
-  await A.locator('.detail-title h3', { hasText: '저녁 데이트 (7시 반)' }).waitFor({ timeout: 10000 });
-  await shot(A, '06-a-detail-synced');
-  await A.getByRole('button', { name: '닫기' }).click();
+  await A.locator('.chip', { hasText: '저녁 데이트 (7시 반)' }).first().waitFor({ timeout: 10000 });
+  await shot(A, '06-a-synced');
 
   step('7. A가 가족 캘린더를 만들고 기념일 추가, 커플 캘린더에서 구독');
   await A.getByRole('button', { name: '새 캘린더' }).click();
@@ -121,8 +120,6 @@ try {
 
   step('8. 원본(가족)에서 제목 변경 → 구독 화면 반영');
   await A.locator('.chip', { hasText: /엄마 생신 \d+주년/ }).first().click();
-  await A.locator('.source-box', { hasText: '가족' }).waitFor();
-  await A.getByRole('button', { name: '수정', exact: true }).click();
   await A.getByPlaceholder(/사귄 날/).fill('엄마 생신 🎂');
   await A.getByRole('button', { name: '저장' }).click();
   // 반복(매년) 일정이므로 범위 선택
@@ -193,7 +190,6 @@ try {
   await A.locator('.list-item', { hasText: '아침 운동' }).nth(4).waitFor();
   if (await A.locator('.list-item', { hasText: '아침 운동' }).count() !== 5) throw new Error('반복 회차 수 불일치');
   await A.locator('.list-item', { hasText: '아침 운동' }).nth(2).click();
-  await A.getByRole('button', { name: '수정', exact: true }).click();
   await A.getByPlaceholder('일정 제목').fill('아침 운동 (쉬는 날)');
   await A.getByRole('button', { name: '저장' }).click();
   await A.getByRole('button', { name: '이 일정만' }).click();

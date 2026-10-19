@@ -27,7 +27,7 @@ export function resolveFeedSources({ calendars, subscriptions, focus, hiddenIds 
     if (!s.active || !targetSet.has(s.targetCalendarId)) continue;
     if (!byId.has(s.sourceCalendarId)) { inaccessible.push(s); continue; }
     if (sources.has(s.sourceCalendarId)) continue;
-    sources.set(s.sourceCalendarId, { calendarId: s.sourceCalendarId, subscribed: true, via: s.targetCalendarId });
+    sources.set(s.sourceCalendarId, { calendarId: s.sourceCalendarId, subscribed: true, via: s.targetCalendarId, ...(s.color ? { color: s.color } : {}) });
   }
   const all = [...sources.values()];
   return { sources: all.slice(0, max), overflow: all.slice(max), inaccessible };
@@ -72,7 +72,8 @@ export function buildInstances({ eventsByCal, sources, calendarsById, range, uid
         calendarName: cal.name,
         // 누구 일정인지 (작성자 이름)
         ownerName: cal.memberInfo?.[ev.createdBy]?.name || '',
-        color: eventColor(ev, cal, src.subscribed),
+        // 구독 일정: 구독할 때 고른 색 (없으면 원본 캘린더 대표 색)
+        color: src.subscribed && src.color ? src.color : eventColor(ev, cal, src.subscribed),
         calendarColor: cal.color,
         categoryName: categoryOf(cal, ev.category)?.name || '',
         hiddenDetails: ev.visibility === 'busy' && !mine,
