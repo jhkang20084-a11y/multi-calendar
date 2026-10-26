@@ -50,7 +50,10 @@ if (!projectId) {
   } catch {
     fail('Firebase 에 로그인되어 있지 않습니다. 먼저 `npx firebase login --no-localhost` 를 실행하세요.');
   }
+  // 프로젝트가 여러 개면 이름이 multi-calendar 로 시작하는 것 하나를 고른다.
+  const named = projects.filter((p) => p.projectId.startsWith('multi-calendar'));
   if (projects.length === 1) projectId = projects[0].projectId;
+  else if (named.length === 1) projectId = named[0].projectId;
   else if (!projects.length) fail('이 계정에 Firebase 프로젝트가 없습니다. console.firebase.google.com 에서 먼저 만드세요.');
   else {
     console.log('\n프로젝트가 여러 개입니다. 배포할 프로젝트 ID 를 골라 아래처럼 다시 실행하세요:');
