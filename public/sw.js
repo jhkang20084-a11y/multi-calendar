@@ -1,5 +1,5 @@
 // 간단한 앱 셸 캐시. 데이터 동기화/오프라인 데이터는 Firestore 의 로컬 캐시가 담당한다.
-const CACHE = 'app-shell-v1';
+const CACHE = 'app-shell-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest'])));
