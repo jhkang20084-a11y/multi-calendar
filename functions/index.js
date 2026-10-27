@@ -5,7 +5,9 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { setGlobalOptions, logger } from 'firebase-functions/v2';
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onRequest } from 'firebase-functions/v2/https';
 import { icsToEvents, normalizeUrl, assertSafeUrl } from './ics.js';
+import { buildWidgetFeed, TOKEN_RE } from './widget.js';
 
 initializeApp();
 const db = getFirestore();
@@ -107,4 +109,21 @@ export const externalCalendarsScheduled = onSchedule({ schedule: 'every 30 minut
 // 캘린더를 지우면 남은 하위 데이터(다른 멤버의 비공개 일정 등 앱에서 못 지운 것)까지 정리한다.
 export const calendarDeleted = onDocumentDeleted('calendars/{calId}', async (event) => {
   await db.recursiveDelete(db.doc(`calendars/${event.params.calId}`));
+});
+
+// 아이폰 홈 화면 위젯이 30분마다 불러가는 일정 피드. ?t=<앱이 만든 비밀 토큰>
+export const widgetFeed = onRequest({ invoker: 'public', memory: '256MiB', timeoutSeconds: 30 }, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (req.method !== 'GET') { res.status(405).json({ error: 'method' }); return; }
+  const token = String(req.query.t || '');
+  if (!TOKEN_RE.test(token)) { res.status(400).json({ error: 'token' }); return; }
+  const snap = await db.doc(`widgetTokens/${token}`).get();
+  const uid = snap.get('uid');
+  if (!snap.exists || !uid) { res.status(401).json({ error: 'revoked' }); return; }
+  try {
+    res.json(await buildWidgetFeed(db, uid, snap.get('calendarId')));
+  } catch (e) {
+    logger.error('widget feed', { uid, error: e.message });
+    res.status(500).json({ error: 'server' });
+  }
 });

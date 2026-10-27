@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Avatar, Modal, useUi, Torn } from './ui.jsx';
 import { db, logout } from '../firebase.js';
+import { isNativeApp, postNative, reconnectWidget } from '../native.js';
 import { updateSettings } from '../services/users.js';
 import { roleOf, ROLE_LABELS } from '../services/calendars.js';
 import { coverStyle } from '../lib/colors.js';
@@ -191,8 +192,18 @@ export function SettingsDialog({ user, profile, onClose }) {
               <option value="">없음</option><option value={0}>시작 시</option><option value={10}>10분 전</option><option value={30}>30분 전</option><option value={60}>1시간 전</option><option value={1440}>하루 전</option>
             </select>
           </label>
-          <small>{notifSupported ? '알림은 앱이 열려 있을 때만 울립니다(서버 푸시 미구현). iPhone은 홈 화면에 추가한 앱에서만 알림 권한을 요청할 수 있습니다.' : '이 브라우저는 알림을 지원하지 않습니다.'}</small>
+          <small>{isNativeApp() ? '아이폰 앱에서는 아직 일정 알림을 보낼 수 없어요(앱이 열려 있을 때도). 위젯으로 확인해 주세요.' : notifSupported ? '알림은 앱이 열려 있을 때만 울립니다(서버 푸시 미구현). iPhone은 홈 화면에 추가한 앱에서만 알림 권한을 요청할 수 있습니다.' : '이 브라우저는 알림을 지원하지 않습니다.'}</small>
         </fieldset>
+        {isNativeApp() && (
+          <fieldset className="fieldset">
+            <legend>홈 화면 위젯</legend>
+            <small>위젯은 지금 보고 있는 캘린더의 앞으로 2주 일정과 기념일을 보여 줘요. 홈 화면을 길게 누르고 ＋ → "Calendar"에서 추가하세요.</small>
+            <div className="btn-row" style={{ justifyContent: 'flex-start' }}>
+              <button type="button" className="btn btn-small" onClick={() => postNative({ type: 'widgetRefresh' })}>위젯 새로 고침</button>
+              <button type="button" className="btn btn-small" onClick={() => write(reconnectWidget(user.uid), '위젯을 새로 연결했어요. 예전 연결은 끊겼어요.')}>위젯 다시 연결</button>
+            </div>
+          </fieldset>
+        )}
         <button className="btn btn-danger" onClick={() => logout()}>로그아웃</button>
       </div>
     </Modal>

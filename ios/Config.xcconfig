@@ -1,0 +1,8 @@
+// 아이폰 앱 설정. 보통은 고칠 필요 없어요.
+// BUNDLE_PREFIX: 앱 고유 이름 앞부분(전 세계에서 겹치면 안 됨). 서명 오류로 "이미 사용 중"이 나오면 끝에 숫자를 붙이세요.
+BUNDLE_PREFIX = kr.jhkang20084
+APP_GROUP_ID = group.$(BUNDLE_PREFIX).kittycal
+// 앱이 여는 웹앱 주소 (xcconfig 에서는 // 가 주석이라 $() 로 나눠 씀)
+APP_URL = https:/$()/multi-calendar-2c53f.firebaseapp.com
+// 서명 팀: Xcode 에서 고르면 되므로 비워 둠. (setup.sh 가 자동으로 넣을 수도 있음)
+#include? "Team.xcconfig"

@@ -62,6 +62,9 @@
         "node_modules",
         ".git",
         "*.log"
+      ],
+      "predeploy": [
+        "node \"$PROJECT_DIR/functions/scripts/sync-shared.mjs\""
       ]
     }
   ]

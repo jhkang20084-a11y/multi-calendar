@@ -7,6 +7,7 @@ import {
   initializeFirestore, connectFirestoreEmulator, persistentLocalCache,
   persistentMultipleTabManager, memoryLocalCache,
 } from 'firebase/firestore';
+import { isNativeApp, nativeGoogleLogin, postNative } from './nativeBridge.js';
 
 const env = import.meta.env;
 
@@ -67,6 +68,11 @@ function shouldUseRedirect() {
 }
 
 export async function signInWithGoogle() {
+  // 아이폰 앱: 구글이 앱 안 웹뷰 로그인을 막으므로, 앱이 띄운 Safari 로그인 창에서 받은 토큰으로 로그인
+  if (isNativeApp()) {
+    const { idToken, accessToken } = await nativeGoogleLogin();
+    return signInWithCredential(auth, GoogleAuthProvider.credential(idToken, accessToken || null));
+  }
   if (shouldUseRedirect()) return signInWithRedirect(auth, provider);
   try {
     return await signInWithPopup(auth, provider);
@@ -84,5 +90,27 @@ export function completeRedirectSignIn() {
 }
 
 export function logout() {
+  postNative({ type: 'signedOut' }); // 아이폰 앱: 위젯에서도 일정을 지움
   return signOut(auth);
+}
+
+/**
+ * 아이폰 앱의 Safari 로그인 창 안에서 열리는 페이지(/?nativeLogin=1) 용.
+ * 구글 로그인(리디렉션)을 마치면 Google 토큰을 kittycal:// 주소로 앱에 돌려준다.
+ * 반환: 'redirecting' | 'retry' | { callbackUrl }
+ */
+export async function runNativeLoginStep(retry = false) {
+  const FLAG = 'nativeLoginStarted';
+  const result = retry ? null : await getRedirectResult(auth);
+  if (result) {
+    const cred = GoogleAuthProvider.credentialFromResult(result);
+    if (!cred?.idToken) throw Object.assign(new Error('no token'), { code: 'app/native-login' });
+    sessionStorage.removeItem(FLAG);
+    const q = new URLSearchParams({ id_token: cred.idToken, access_token: cred.accessToken || '' });
+    return { callbackUrl: `kittycal://auth?${q}` };
+  }
+  if (!retry && sessionStorage.getItem(FLAG)) return 'retry'; // 구글에서 돌아왔는데 결과가 없음(취소 등)
+  sessionStorage.setItem(FLAG, '1');
+  await signInWithRedirect(auth, provider);
+  return 'redirecting';
 }

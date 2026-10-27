@@ -7,3 +7,10 @@ dist
 test-results
 design-preview
 multi-calendar-source.zip
+ios/KittyCal.xcodeproj
+ios/.tools
+ios/Team.xcconfig
+ios/build
+xcuserdata
+ios/*/Info.plist
+ios/*/*.entitlements

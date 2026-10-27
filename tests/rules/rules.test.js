@@ -15,6 +15,7 @@ import { ensureUserProfile } from '../../src/services/users.js';
 import { saveMemo } from '../../src/services/memos.js';
 import { createInviteLink, getInviteLink, joinWithLink, deleteInviteLink } from '../../src/services/inviteLinks.js';
 import { Timestamp } from 'firebase/firestore';
+import { createWidgetToken, setWidgetCalendar, revokeWidgetTokens, newWidgetToken } from '../../src/services/widget.js';
 
 const PROJECT = 'demo-multi-calendar';
 let env;
@@ -513,5 +514,29 @@ describe('외부 캘린더(아이폰 링크)', () => {
     await assertFails(updateDoc(doc(a, 'calendars', id, 'events', 'x1'), { title: '고침', updatedAt: serverTimestamp(), updatedBy: 'alice' }));
     await assertFails(deleteDoc(doc(a, 'calendars', id, 'events', 'x1')));
     await assertFails(getDoc(doc(dbOf('bob'), 'calendars', id)));
+  });
+});
+
+describe('아이폰 위젯 토큰', () => {
+  it('본인 토큰만 만들고 읽고 고치고 지울 수 있음', async () => {
+    const a = dbOf('alice');
+    const b = dbOf('bob');
+    const token = await createWidgetToken(a, 'alice', 'cal1');
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    await assertSucceeds(getDoc(doc(a, 'widgetTokens', token)));
+    await assertFails(getDoc(doc(b, 'widgetTokens', token)));
+    await assertFails(updateDoc(doc(b, 'widgetTokens', token), { calendarId: 'x', updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(b, 'widgetTokens', token)));
+    await assertSucceeds(setWidgetCalendar(a, token, 'cal2'));
+    await assertFails(updateDoc(doc(a, 'widgetTokens', token), { uid: 'bob', updatedAt: serverTimestamp() }));
+    // 다른 사람 이름으로 만들기, 짧은(추측하기 쉬운) 토큰, 엉뚱한 필드
+    await assertFails(setDoc(doc(a, 'widgetTokens', newWidgetToken()), { uid: 'bob', calendarId: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(a, 'widgetTokens', 'short'), { uid: 'alice', calendarId: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(a, 'widgetTokens', newWidgetToken()), { uid: 'alice', calendarId: '', admin: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    // 모든 토큰 목록은 볼 수 없고, 내 것만 골라 볼 수 있음
+    await assertFails(getDocs(collection(b, 'widgetTokens')));
+    await assertSucceeds(getDocs(query(collection(b, 'widgetTokens'), where('uid', '==', 'bob'))));
+    expect(await revokeWidgetTokens(a, 'alice')).toBe(1);
+    await assertFails(getDoc(doc(a, 'widgetTokens', token))); // 지운 뒤에는 없음(본인도 확인 불가 → 앱은 새로 만든다)
   });
 });

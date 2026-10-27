@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import NativeLogin from './components/NativeLogin.jsx';
 // 글꼴을 앱에 포함 (오프라인/PWA 에서도 같은 모양). 한글 글꼴은 필요한 글자 조각만 내려받는다.
 import '@fontsource/abril-fatface/latin-400.css';
 import '@fontsource/playfair-display/latin-700-italic.css';
@@ -20,7 +21,9 @@ document.addEventListener('touchend', (e) => {
   lastTouchEnd = now;
 }, { passive: false });
 
-createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+// 아이폰 앱의 Safari 로그인 창에서는 로그인 페이지만 보여 준다
+const nativeLogin = new URLSearchParams(window.location.search).has('nativeLogin');
+createRoot(document.getElementById('root')).render(<React.StrictMode>{nativeLogin ? <NativeLogin /> : <App />}</React.StrictMode>);
 
 // PWA: 배포 빌드에서만 서비스 워커 등록 (개발 중 캐시 문제 방지)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

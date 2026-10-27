@@ -28,6 +28,8 @@ export function friendlyError(e) {
     'app/no-access': '해당 캘린더에 접근 권한이 없습니다.',
     'app/link-invalid': '초대 링크가 올바르지 않거나 취소되었습니다. 초대한 사람에게 새 링크를 받아 주세요.',
     'app/link-expired': '초대 링크의 유효 기간이 지났습니다. 초대한 사람에게 새 링크를 받아 주세요.',
+    'app/login-cancelled': '로그인을 취소했어요.',
+    'app/native-login': '로그인 창에서 문제가 생겼어요. 다시 시도해 주세요.',
     'app/invalid-feed': '캘린더 링크는 https:// 또는 webcal:// 로 시작해야 합니다.',
     'app/has-members': '다른 멤버가 있는 캘린더는 개인 캘린더로 바꿀 수 없습니다.',
   };

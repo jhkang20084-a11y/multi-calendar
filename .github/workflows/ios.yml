@@ -1,0 +1,21 @@
+# 아이폰 앱이 컴파일되는지 GitHub 의 맥에서 확인 (서명 없이 시뮬레이터용으로 빌드)
+name: iOS build
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: XcodeGen
+        run: brew install xcodegen && cd ios && xcodegen generate
+      - name: Build
+        run: |
+          xcodebuild -version
+          cd ios
+          xcodebuild -project KittyCal.xcodeproj -scheme KittyCal -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO -quiet build
